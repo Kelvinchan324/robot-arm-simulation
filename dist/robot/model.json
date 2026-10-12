@@ -1,0 +1,246 @@
+{
+  "name": "ENGG1101 \u00b7 Fusion arm",
+  "source": "ENGG1101_Robot_Arm_relation.f3d",
+  "source_occurrences": 592,
+  "rigid_links": 9,
+  "physical_joints": 8,
+  "independent_controls": 5,
+  "assets": [
+    "base.obj",
+    "base_gear.obj",
+    "yaw_platform.obj",
+    "upper_arm.obj",
+    "forearm.obj",
+    "wrist_carrier.obj",
+    "gripper_pinion.obj",
+    "jaw_a.obj",
+    "jaw_b.obj"
+  ],
+  "couplings": [
+    {
+      "master": "base_yaw",
+      "slave": "base_gear_drive",
+      "multiplier": -1.0,
+      "offset": 0
+    },
+    {
+      "master": "gripper_drive",
+      "slave": "jaw_a_slide",
+      "multiplier": -0.0125,
+      "offset": 0
+    },
+    {
+      "master": "jaw_a_slide",
+      "slave": "jaw_b_slide",
+      "multiplier": 1.0,
+      "offset": 0
+    }
+  ],
+  "joints": [
+    {
+      "name": "base_yaw",
+      "fusion_name": "01 - BASE YAW",
+      "child": 2,
+      "parent": 0,
+      "origin": [
+        0.0,
+        0.0,
+        0.049700000000000015
+      ],
+      "axis": [
+        -1.5567891882036387e-19,
+        -3.2694118841291635e-19,
+        -1.0
+      ],
+      "slide": false,
+      "q0": -1.5317305480136096,
+      "lo": -3.141592653589793,
+      "hi": 3.141592653589793,
+      "limited": false
+    },
+    {
+      "name": "base_gear_drive",
+      "fusion_name": "00 - Base servo gear",
+      "child": 1,
+      "parent": 0,
+      "origin": [
+        -0.012799999999999926,
+        0.050400000968576,
+        0.04004999999999999
+      ],
+      "axis": [
+        9.564450772100503e-16,
+        1.2326484365926787e-15,
+        -1.0
+      ],
+      "slide": false,
+      "q0": 1.5317305480136092,
+      "lo": -3.141592653589793,
+      "hi": 3.141592653589793,
+      "limited": false
+    },
+    {
+      "name": "shoulder",
+      "fusion_name": "02 - SHOULDER",
+      "child": 3,
+      "parent": 2,
+      "origin": [
+        -0.0011480841569409522,
+        0.052070403328269205,
+        0.1074000000000001
+      ],
+      "axis": [
+        -0.9402479141343592,
+        -0.34049061656084845,
+        -6.404299222605421e-17
+      ],
+      "slide": false,
+      "q0": -0.2104982483187463,
+      "lo": -2.110789656833712,
+      "hi": 1.2402425069954008,
+      "limited": true
+    },
+    {
+      "name": "elbow",
+      "fusion_name": "03 - ELBOW",
+      "child": 4,
+      "parent": 3,
+      "origin": [
+        -0.007283865946392024,
+        0.07048252902041537,
+        0.22632163726307053
+      ],
+      "axis": [
+        -0.9402479141343579,
+        -0.3404906165608524,
+        3.796357730721969e-15
+      ],
+      "slide": false,
+      "q0": 0.48598396128588295,
+      "lo": -1.8647940703614032,
+      "hi": 1.521144678507596,
+      "limited": true
+    },
+    {
+      "name": "wrist_pitch",
+      "fusion_name": "04 - WRIST",
+      "child": 5,
+      "parent": 4,
+      "origin": [
+        0.03194760950811178,
+        -0.037559546664613516,
+        0.3297091182041135
+      ],
+      "axis": [
+        -0.940247914134357,
+        -0.3404906165608541,
+        5.271021949554743e-15
+      ],
+      "slide": false,
+      "q0": -1.3038717637490151,
+      "lo": -0.005125175246732061,
+      "hi": 3.6077063763815302,
+      "limited": true
+    },
+    {
+      "name": "gripper_drive",
+      "fusion_name": "05 - GRIPPER DRIVE",
+      "child": 6,
+      "parent": 5,
+      "origin": [
+        0.02652274997393926,
+        -0.07030431728753858,
+        0.2604637869832515
+      ],
+      "axis": [
+        -0.13130138668261182,
+        0.36258225321523513,
+        0.9226559789588893
+      ],
+      "slide": false,
+      "q0": 1.1210536388607206,
+      "lo": -1.12105363886072,
+      "hi": 1.59894636113928,
+      "limited": true
+    },
+    {
+      "name": "jaw_a_slide",
+      "fusion_name": "06 - JAW A SLIDE",
+      "child": 7,
+      "parent": 5,
+      "origin": [
+        -0.0015669966199334364,
+        -0.07639994450843851,
+        0.2307365028683473
+      ],
+      "axis": [
+        -0.9402479141343577,
+        -0.3404906165608529,
+        5.5612779003655786e-15
+      ],
+      "slide": true,
+      "q0": -0.014013170485759001,
+      "lo": -0.019986829514241,
+      "hi": 0.014013170485759001,
+      "limited": true
+    },
+    {
+      "name": "jaw_b_slide",
+      "fusion_name": "07 - JAW B SLIDE",
+      "child": 8,
+      "parent": 5,
+      "origin": [
+        0.05200236744219913,
+        -0.05700094821810274,
+        0.2307365028683469
+      ],
+      "axis": [
+        0.9402479141343576,
+        0.3404906165608529,
+        -5.41832803241279e-15
+      ],
+      "slide": true,
+      "q0": -0.014013170485759001,
+      "lo": -0.019986829514241,
+      "hi": 0.014013170485759001,
+      "limited": true
+    }
+  ],
+  "tool_position": [
+    0.03747985230004245,
+    -0.10056180974993945,
+    0.18346813825528005
+  ],
+  "tool_definition": "Midpoint between jaw-tip extents, computed from CAD meshes; +Z points out of the gripper.",
+  "cad_to_lab_rotation": [
+    [
+      1.0,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      -1.0
+    ],
+    [
+      0.0,
+      1.0,
+      0.0
+    ]
+  ],
+  "cad_to_lab_shift_m": [
+    -0.0049264500959866515,
+    -0.022407986624959544,
+    -0.07776511049633221
+  ],
+  "reference": "Joint values are relative to the exported Fusion pose. Base yaw has no CAD limits; UI uses +/-180 degrees.",
+  "limitations": "Kinematics only. No collision avoidance or calibrated dynamics. Box inertia and effort/velocity entries are placeholders.",
+  "example_pose": [
+    0.2,
+    -0.25,
+    0.35,
+    0.65,
+    -0.2
+  ]
+}

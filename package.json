@@ -1,0 +1,1 @@
+{"name":"engg1101-robot-arm-lab","private":true,"type":"module","dependencies":{"@mujoco/mujoco":"3.15.0","three":"0.186.1"}}

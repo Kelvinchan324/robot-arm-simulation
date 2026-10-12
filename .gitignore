@@ -1,0 +1,7 @@
+node_modules/
+*.tar.gz
+robot-arm-lab/
+
+__pycache__/
+cad-export/
+

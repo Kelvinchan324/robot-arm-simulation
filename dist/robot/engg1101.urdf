@@ -1,0 +1,207 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="ENGG1101_Robot_Arm">
+  <!--CAD geometry and relations. q=0 is the exported Fusion pose. Inertias are coarse approximations; kinematics use only.-->
+  <mujoco>
+    <compiler discardvisual="false" fusestatic="false" />
+  </mujoco>
+  <link name="base">
+    <inertial>
+      <origin xyz="0 0.04539999982 0.03140000006" />
+      <mass value="0.24519130450467208" />
+      <inertia ixx="0.0012108952604038287" iyy="0.0006436239313262166" izz="0.0016933533120596397" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="base.obj" />
+      </geometry>
+      <material name="base_material">
+        <color rgba="0.25 0.31 0.38 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="base_gear">
+    <inertial>
+      <origin xyz="-5.03069808e-17 3.122502257e-17 0.001900000048" />
+      <mass value="0.01" />
+      <inertia ixx="2.6687623426743405e-06" iyy="2.6662204408954375e-06" izz="5.2201661208594085e-06" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="base_gear.obj" />
+      </geometry>
+      <material name="base_gear_material">
+        <color rgba="0.62 0.71 0.77 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="yaw_platform">
+    <inertial>
+      <origin xyz="-0.00779299831 0.02177250193 0.02929999978" />
+      <mass value="0.057638017355055735" />
+      <inertia ixx="7.802776681206849e-05" iyy="5.447690969060774e-05" izz="7.584420013886735e-05" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="yaw_platform.obj" />
+      </geometry>
+      <material name="yaw_platform_material">
+        <color rgba="0.17 0.50 0.61 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="upper_arm">
+    <inertial>
+      <origin xyz="-0.01925652939 0.01721299038 0.06000194063" />
+      <mass value="0.10037441313230537" />
+      <inertia ixx="0.00025064157646647787" iyy="0.00022519165919379825" izz="0.00011752539467546681" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="upper_arm.obj" />
+      </geometry>
+      <material name="upper_arm_material">
+        <color rgba="0.62 0.73 0.81 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="forearm">
+    <inertial>
+      <origin xyz="-0.002785319143 -0.05754896901 0.0520089019" />
+      <mass value="0.17428493294969638" />
+      <inertia ixx="0.0005717740014158129" iyy="0.00036603010015766595" izz="0.00043702753373412763" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="forearm.obj" />
+      </geometry>
+      <material name="forearm_material">
+        <color rgba="0.62 0.73 0.81 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="wrist_carrier">
+    <inertial>
+      <origin xyz="-0.002978787186 -0.03606921162 -0.04837047925" />
+      <mass value="0.1555654655090856" />
+      <inertia ixx="0.00031123933637478116" iyy="0.00040725615696567336" izz="0.0003530428126332121" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="wrist_carrier.obj" />
+      </geometry>
+      <material name="wrist_carrier_material">
+        <color rgba="0.19 0.53 0.63 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="gripper_pinion">
+    <inertial>
+      <origin xyz="0.001958707092 -0.004714702067 -0.008515274109" />
+      <mass value="0.01" />
+      <inertia ixx="1.190340624365102e-06" iyy="1.1531876453303606e-06" izz="1.286388803900213e-06" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="gripper_pinion.obj" />
+      </geometry>
+      <material name="gripper_pinion_material">
+        <color rgba="0.74 0.49 0.19 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="jaw_a">
+    <inertial>
+      <origin xyz="0.02379635072 -0.01749711957 -0.01075837145" />
+      <mass value="0.03122225775681251" />
+      <inertia ixx="2.493646441325443e-05" iyy="2.8262915799724918e-05" izz="2.0883717334735523e-05" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="jaw_a.obj" />
+      </geometry>
+      <material name="jaw_a_material">
+        <color rgba="0.73 0.78 0.82 1" />
+      </material>
+    </visual>
+  </link>
+  <link name="jaw_b">
+    <inertial>
+      <origin xyz="-0.01434968814 -0.01466790104 -0.01518092147" />
+      <mass value="0.03329500970641971" />
+      <inertia ixx="2.4853764538588577e-05" iyy="2.904573353006712e-05" izz="2.6740233902928078e-05" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="jaw_b.obj" />
+      </geometry>
+      <material name="jaw_b_material">
+        <color rgba="0.73 0.78 0.82 1" />
+      </material>
+    </visual>
+  </link>
+  <joint name="base_yaw" type="continuous">
+    <parent link="base" />
+    <child link="yaw_platform" />
+    <origin xyz="0 0 0.0497" rpy="0 0 0" />
+    <axis xyz="-1.556789188e-19 -3.269411884e-19 -1" />
+    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="1" velocity="1" />
+  </joint>
+  <joint name="base_gear_drive" type="continuous">
+    <parent link="base" />
+    <child link="base_gear" />
+    <origin xyz="-0.0128 0.05040000097 0.04005" rpy="0 0 0" />
+    <axis xyz="9.564450772e-16 1.232648437e-15 -1" />
+    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="1" velocity="1" />
+    <mimic joint="base_yaw" multiplier="-1.0" offset="0" />
+  </joint>
+  <joint name="shoulder" type="revolute">
+    <parent link="yaw_platform" />
+    <child link="upper_arm" />
+    <origin xyz="-0.001148084157 0.05207040333 0.0577" rpy="0 0 0" />
+    <axis xyz="-0.9402479141 -0.3404906166 -6.404299223e-17" />
+    <limit lower="-2.110789656833712" upper="1.2402425069954008" effort="1" velocity="1" />
+  </joint>
+  <joint name="elbow" type="revolute">
+    <parent link="upper_arm" />
+    <child link="forearm" />
+    <origin xyz="-0.006135781789 0.01841212569 0.1189216373" rpy="0 0 0" />
+    <axis xyz="-0.9402479141 -0.3404906166 3.796357731e-15" />
+    <limit lower="-1.8647940703614032" upper="1.521144678507596" effort="1" velocity="1" />
+  </joint>
+  <joint name="wrist_pitch" type="revolute">
+    <parent link="forearm" />
+    <child link="wrist_carrier" />
+    <origin xyz="0.03923147545 -0.1080420757 0.1033874809" rpy="0 0 0" />
+    <axis xyz="-0.9402479141 -0.3404906166 5.27102195e-15" />
+    <limit lower="-0.005125175246732061" upper="3.6077063763815302" effort="1" velocity="1" />
+  </joint>
+  <joint name="gripper_drive" type="revolute">
+    <parent link="wrist_carrier" />
+    <child link="gripper_pinion" />
+    <origin xyz="-0.005424859534 -0.03274477062 -0.06924533122" rpy="0 0 0" />
+    <axis xyz="-0.1313013867 0.3625822532 0.922655979" />
+    <limit lower="-1.12105363886072" upper="1.59894636113928" effort="1" velocity="1" />
+  </joint>
+  <joint name="jaw_a_slide" type="prismatic">
+    <parent link="wrist_carrier" />
+    <child link="jaw_a" />
+    <origin xyz="-0.03351460613 -0.03884039784 -0.09897261534" rpy="0 0 0" />
+    <axis xyz="-0.9402479141 -0.3404906166 5.5612779e-15" />
+    <limit lower="-0.019986829514241" upper="0.014013170485759001" effort="1" velocity="1" />
+    <mimic joint="gripper_drive" multiplier="-0.0125" offset="0" />
+  </joint>
+  <joint name="jaw_b_slide" type="prismatic">
+    <parent link="wrist_carrier" />
+    <child link="jaw_b" />
+    <origin xyz="0.02005475793 -0.01944140155 -0.09897261534" rpy="0 0 0" />
+    <axis xyz="0.9402479141 0.3404906166 -5.418328032e-15" />
+    <limit lower="-0.019986829514241" upper="0.014013170485759001" effort="1" velocity="1" />
+    <mimic joint="jaw_a_slide" multiplier="1.0" offset="0" />
+  </joint>
+  <link name="tool_tip" />
+  <joint name="tool_mount" type="fixed">
+    <parent link="wrist_carrier" />
+    <child link="tool_tip" />
+    <origin xyz="0.005532242792 -0.06300226309 -0.1462409799" rpy="-2.745708513 -4.718447855e-15 -2.79415401" />
+  </joint>
+</robot>

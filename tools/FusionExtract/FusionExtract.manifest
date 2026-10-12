@@ -1,0 +1,1 @@
+{"autodeskProduct":"Fusion360","type":"script","author":"ENGG1101 Robot Arm Lab","description":{"":"Read-only extraction of the active robot design for URDF preparation."},"version":"1.0.0","supportedOS":"windows|mac"}
