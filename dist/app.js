@@ -45,10 +45,10 @@ function rebuild(){for(const mesh of [...geomMeshes,...jointMarkers]){scene.remo
     const buttons=document.createElement('div');buttons.className='button-row gripper-buttons';
     for(const [id,label,angle] of [['open-gripper','Open gripper',90],['close-gripper','Close gripper',-90]]){
       const button=document.createElement('button');button.id=id;button.textContent=label;
-      button.onclick=()=>{cancelSolve();pauseKeyboard();const q=engine.q;q[gripperIndex]=jointAngles[gripperIndex].fromDisplay(angle);engine.q=q;update();};
+      button.onclick=()=>{cancelSolve();clearKeys();const q=engine.q;q[gripperIndex]=jointAngles[gripperIndex].fromDisplay(angle);engine.q=q;update();if(keyboardEnabled)$('canvas').focus();};
       buttons.append(button);
     }
-    $(`q${gripperIndex}`).closest('.joint').append(buttons);
+    $('keyboard').insertBefore(buttons,$('keyboard-status'));
   }
   $('joint-count').textContent=`${engine.joints.length} CONTROLS`;trace=[];traceLine.geometry.setFromPoints([]);update();home();
 }
