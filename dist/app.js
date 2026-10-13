@@ -103,7 +103,7 @@ window.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(!mo
 window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);document.addEventListener('focusin',()=>{if(editing())clearKeys();});setInterval(keyboardStep,80);
 document.querySelectorAll('button:not(.close),input,select').forEach(b=>b.disabled=true);
 try{
-  const mj=await loadMujoco();engine=new RobotEngine(mj);await cad();$('loading').hidden=true;$('engine-status').textContent='MuJoCo ready';$('dot').style.background='#5de2ed';
+  const mj=await loadMujoco();engine=new RobotEngine(mj);await cad();$('loading').hidden=true;
   document.querySelectorAll('button,input,select').forEach(b=>b.disabled=false);
   let wasLocked=false;
   hardware=setupHardware({engine,commandEngine,angles:jointAngles,onFeedback:syncJog,onPauseSimulation:()=>{pauseKeyboard();setPickMode(false);},onLock:locked=>{
@@ -116,4 +116,4 @@ try{
     $('keyboard-note').textContent=locked?'E enables + levels · Esc pauses · leaving the page pauses':'Levels wrist first · moves hold pitch · Esc stops';
     if(locked)keyboardStatus('USB arm · use controls above');
   }});
-}catch(e){$('loading').hidden=false;$('loading').textContent='Could not initialize MuJoCo: '+e.message;$('engine-status').textContent='Engine unavailable';}
+}catch(e){$('loading').hidden=false;$('loading').textContent='Could not initialize MuJoCo: '+e.message;}
