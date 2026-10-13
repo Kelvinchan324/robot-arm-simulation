@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "servo_family": "sms_sts",
+  "calibration_confirmed": true,
+  "position_mode_confirmed": true,
+  "servos": {
+    "base_yaw": {
+      "id": 1,
+      "joint_degrees": [
+        -180.0,
+        180.00000000000003
+      ],
+      "raw_positions": [
+        200,
+        3800
+      ],
+      "raw_limits": [
+        200,
+        3800
+      ],
+      "safe_degrees": [
+        -180.0,
+        180.00000000000003
+      ],
+      "max_deg_s": 10,
+      "speed": 100,
+      "acceleration": 20
+    },
+    "shoulder": {
+      "id": 2,
+      "joint_degrees": [
+        -102.00000000979114,
+        90.0
+      ],
+      "raw_positions": [
+        200,
+        3800
+      ],
+      "raw_limits": [
+        200,
+        3800
+      ],
+      "safe_degrees": [
+        -102.00000000979114,
+        90.0
+      ],
+      "max_deg_s": 10,
+      "speed": 100,
+      "acceleration": 20
+    },
+    "elbow": {
+      "id": 3,
+      "joint_degrees": [
+        -90.0,
+        104.0000000075058
+      ],
+      "raw_positions": [
+        200,
+        3800
+      ],
+      "raw_limits": [
+        200,
+        3800
+      ],
+      "safe_degrees": [
+        -90.0,
+        104.0000000075058
+      ],
+      "max_deg_s": 10,
+      "speed": 100,
+      "acceleration": 20
+    },
+    "wrist_pitch": {
+      "id": 4,
+      "joint_degrees": [
+        -116.99999997815527,
+        90.0
+      ],
+      "raw_positions": [
+        200,
+        3800
+      ],
+      "raw_limits": [
+        200,
+        3800
+      ],
+      "safe_degrees": [
+        -116.99999997815527,
+        90.0
+      ],
+      "max_deg_s": 10,
+      "speed": 100,
+      "acceleration": 20
+    },
+    "gripper_drive": {
+      "id": 5,
+      "joint_degrees": [
+        -90.0,
+        90.0
+      ],
+      "raw_positions": [
+        3800,
+        200
+      ],
+      "raw_limits": [
+        200,
+        3800
+      ],
+      "safe_degrees": [
+        -90.0,
+        90.0
+      ],
+      "max_deg_s": 30,
+      "speed": 100,
+      "acceleration": 20
+    }
+  },
+  "test_initial_raw": [
+    1812,
+    2468,
+    2183,
+    205,
+    1684
+  ]
+}

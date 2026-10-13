@@ -50,6 +50,12 @@ Third-party MuJoCo and Three.js licenses are retained in `dist/vendor`.
 
 ## Raspberry Pi hardware control
 
+The website now supports **direct USB serial keyboard control** in desktop
+Chrome/Edge. The 3D arm follows measured STS3215 positions; FK/IK edits are
+disabled while connected. See [Web Serial setup](raspberry_pi/WEB_SERIAL.md)
+to export your measured calibration, connect the ESP32 board and use the same
+W/S, arrow, A/D and J/L keys. The initial connection is read-only.
+
 [raspberry_pi/README.md](raspberry_pi/README.md) contains the Python controller
 for Waveshare ESP32 + STS3215 servos (IDs 1–5, `/dev/ttyUSB0`, 115200 baud).
 It uses the same robot geometry, calibrated angles and keyboard kinematics,

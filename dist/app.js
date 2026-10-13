@@ -5,9 +5,10 @@ import {RobotEngine} from './engine.js';
 import {CartesianJog} from './jog.js';
 import {PointTarget} from './point-target.js';
 import {calibrateJointAngles} from './joint-angles.js';
+import {setupHardware} from './hardware-ui.js';
 const $=id=>document.getElementById(id);
 let jointAngles=[],jog,keyboardEnabled=false,pointPicker,solveRevision=0;
-let engine,geomMeshes=[],jointMarkers=[],trace=[],robotConfig=null;
+let engine,commandEngine,hardware,geomMeshes=[],jointMarkers=[],trace=[],robotConfig=null;
 const scene=new THREE.Scene();scene.background=new THREE.Color('#08121d');
 const camera=new THREE.PerspectiveCamera(38,1,.001,100);camera.up.set(0,0,1);
 let renderer;
@@ -49,10 +50,11 @@ async function cad(){
   const xml=await (await fetch('./robot/engg1101.xml')).text();
   const assets=await Promise.all(robotConfig.assets.map(async name=>[name,new Uint8Array(await (await fetch('./robot/'+name)).arrayBuffer())]));
   engine.load(xml,assets,robotConfig);jointAngles=calibrateJointAngles(engine.joints);jog=new CartesianJog(engine);
+  commandEngine=new RobotEngine(engine.mj);commandEngine.load(xml,assets,robotConfig);calibrateJointAngles(commandEngine.joints);
   rebuild();
   engine.pose().p.forEach((v,i)=>$(['tx','ty','tz'][i]).value=v.toFixed(5));targetChange();
 }
-function cancelSolve(){solveRevision++;if(engine?.model)$('solve').disabled=false;}
+function cancelSolve(){solveRevision++;if(engine?.model)$('solve').disabled=!!hardware?.locked();}
 function updateTargetLines(){if(!engine?.model)return;const p=new THREE.Vector3(...engine.pose().p);errorLine.geometry.setFromPoints([p,target.position]);errorLine.computeLineDistances();errorLine.visible=p.distanceTo(target.position)>.0005;targetStem.geometry.setFromPoints([new THREE.Vector3(target.position.x,target.position.y,0),target.position]);targetStem.computeLineDistances();}
 function targetChange(){
   cancelSolve();const p=['tx','ty','tz'].map(id=>$(id).value===''?NaN:Number($(id).value));
@@ -61,7 +63,7 @@ function targetChange(){
 function setTarget(p){p.forEach((v,i)=>$(['tx','ty','tz'][i]).value=v.toFixed(5));targetChange();}
 function setPickMode(enabled){pointPicker?.enable(enabled);$('pick-target').setAttribute('aria-pressed',String(enabled));$('pick-target').textContent=enabled?'Done picking':'Pick target in 3D';$('pick-controls').hidden=!enabled;if(enabled){pauseKeyboard();targetChange();}else cancelSolve();}
 async function solveTarget(){
-  if(!engine?.model)return;pauseKeyboard();const targetP=['tx','ty','tz'].map(id=>$(id).value===''?NaN:Number($(id).value)),revision=++solveRevision;
+  if(!engine?.model||hardware?.locked())return;pauseKeyboard();const targetP=['tx','ty','tz'].map(id=>$(id).value===''?NaN:Number($(id).value)),revision=++solveRevision;
   $('solve').disabled=true;$('solver-result').textContent='Solving…';await new Promise(r=>setTimeout(r,20));if(revision!==solveRevision)return;
   try{const result=engine.solve(targetP);update();$('solver-result').classList.toggle('fail',!result.converged);$('solver-result').textContent=`${result.converged?'Reached':'Best found'} · ${(result.error*1000).toFixed(2)} mm error`;}
   catch(e){$('solver-result').textContent=e.message;}finally{if(revision===solveRevision)$('solve').disabled=false;}
@@ -88,7 +90,7 @@ function levelWrist(){clearKeys();if(!jog)return false;if(!jog.levelWrist()){key
 $('keyboard-toggle').onclick=()=>{if(keyboardEnabled){pauseKeyboard();return;}setPickMode(false);if(!levelWrist())return;keyboardEnabled=true;$('keyboard-toggle').textContent='Disable keys';$('keyboard-toggle').setAttribute('aria-pressed','true');keyboardStatus('On · hold a key');$('canvas').focus();};
 $('level-gripper').onclick=()=>{if(levelWrist())keyboardStatus(keyboardEnabled?'On · pitch 0°':'Level · enable keys to move');};
 function keyboardStep(){
-  if(!keyboardEnabled||!jog||!held.size||editing()||document.hidden)return;
+  if(hardware?.locked()||!keyboardEnabled||!jog||!held.size||editing()||document.hidden)return;
   const v=k=>held.has(k)?1:0;
   const motion={height:(v('w')-v('s'))*.0025,reach:(v('arrowup')-v('arrowdown'))*.0025,yaw:(v('arrowright')-v('arrowleft'))*Math.PI/120,pitch:(v('a')-v('d'))*Math.PI/120};
   if(!Object.values(motion).some(Boolean))return;
@@ -98,4 +100,18 @@ window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(k
 window.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(!moveKeys.has(key))return;held.delete(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.remove('pressed');});
 window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);document.addEventListener('focusin',()=>{if(editing())clearKeys();});setInterval(keyboardStep,80);
 document.querySelectorAll('button:not(.close),input,select').forEach(b=>b.disabled=true);
-try{const mj=await loadMujoco();engine=new RobotEngine(mj);await cad();$('loading').hidden=true;$('engine-status').textContent='MuJoCo ready';$('dot').style.background='#5de2ed';document.querySelectorAll('button,input,select').forEach(b=>b.disabled=false);}catch(e){$('loading').textContent='Could not initialize MuJoCo: '+e.message;$('engine-status').textContent='Engine unavailable';}
+try{
+  const mj=await loadMujoco();engine=new RobotEngine(mj);await cad();$('loading').hidden=true;$('engine-status').textContent='MuJoCo ready';$('dot').style.background='#5de2ed';
+  document.querySelectorAll('button,input,select').forEach(b=>b.disabled=false);
+  let wasLocked=false;
+  hardware=setupHardware({engine,commandEngine,angles:jointAngles,onFeedback:syncJog,onPauseSimulation:()=>{pauseKeyboard();setPickMode(false);},onLock:locked=>{
+    if(locked&&!wasLocked){cancelSolve();pauseKeyboard();setPickMode(false);}
+    if(!locked&&wasLocked)pauseKeyboard();
+    wasLocked=locked;
+    document.querySelectorAll('#fk input,#fk button,#ik input,#ik button,#keyboard-toggle,#level-gripper').forEach(control=>control.disabled=locked);
+    $('serial-motion').hidden=!locked;$('simulation-motion').hidden=locked;
+    $('fk-note').textContent=locked?'Measured joint angles · keyboard only':'Calibrated joint angles';
+    $('keyboard-note').textContent=locked?'E enables + levels · Esc pauses · leaving the page pauses':'Levels wrist first · moves hold pitch · Esc stops';
+    if(locked)keyboardStatus('USB arm · use controls above');
+  }});
+}catch(e){$('loading').hidden=false;$('loading').textContent='Could not initialize MuJoCo: '+e.message;$('engine-status').textContent='Engine unavailable';}

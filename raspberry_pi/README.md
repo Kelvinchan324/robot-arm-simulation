@@ -5,6 +5,11 @@ Python controller for this robot, a Waveshare **Servo Driver with ESP32**, and
 
 Configured connection: **`/dev/ttyUSB0`, 115200 baud**. Motor IDs:
 
+For direct keyboard control from the website with a live simulated view,
+see [WEB_SERIAL.md](WEB_SERIAL.md). It uses the same calibration but connects
+through the browser instead of this Python process. Export the profile with
+`python raspberry_pi/export_browser_profile.py` after calibration is complete.
+
 | Simulation joint | Servo ID |
 | --- | --- |
 | Base yaw | 1 |

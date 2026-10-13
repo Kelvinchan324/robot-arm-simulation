@@ -7,4 +7,5 @@ cad-export/
 .venv/
 raspberry_pi/scservo_sdk/
 raspberry_pi/scservosdk/
+arm-calibration.json
 
