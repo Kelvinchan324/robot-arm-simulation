@@ -73,7 +73,7 @@ $('target-height').oninput=()=>{$('tz').value=$('target-height').value;targetCha
 $('solve').onclick=solveTarget;
 $('use-current').onclick=()=>{engine.pose().p.forEach((v,i)=>$(['tx','ty','tz'][i]).value=v.toFixed(5));targetChange();$('solver-result').textContent='Target = current position';};
 $('home-view').onclick=home;$('axes').onchange=()=>{axes.visible=toolAxes.visible=$('axes').checked;update();};$('trail').onchange=()=>{trace=[];traceLine.geometry.setFromPoints([]);update();};$('reset').onclick=()=>{cancelSolve();pauseKeyboard();engine.q=engine.joints.map(()=>0);update();};$('example').onclick=example;
-const held=new Set(),moveKeys=new Set(['w','s','a','d','arrowup','arrowdown','arrowleft','arrowright','o','c']);
+const held=new Set(),moveKeys=new Set(['w','s','a','d','arrowup','arrowdown','arrowleft','arrowright','j','l']);
 function setGripper(open){
   const i=engine.joints.findIndex(j=>j.name==='gripper_drive');if(i<0)return;
   cancelSolve();const q=engine.q;q[i]=jointAngles[i].fromDisplay(open?90:-90);engine.q=q;update();
@@ -94,7 +94,7 @@ function keyboardStep(){
   if(!Object.values(motion).some(Boolean))return;
   const ok=jog.step(motion);if(ok){syncJog();keyboardStatus('On · pitch held');}else keyboardStatus('Limit reached · try another direction');
 }
-window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(key==='escape'){pauseKeyboard();setPickMode(false);return;}if(event.ctrlKey||event.altKey||event.metaKey){clearKeys();return;}if(!keyboardEnabled||!moveKeys.has(key)||editing()||document.hidden)return;event.preventDefault();if(event.repeat||held.has(key))return;held.add(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.add('pressed');if(key==='o'||key==='c')setGripper(key==='o');else keyboardStep();});
+window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(key==='escape'){pauseKeyboard();setPickMode(false);return;}if(event.ctrlKey||event.altKey||event.metaKey){clearKeys();return;}if(!keyboardEnabled||!moveKeys.has(key)||editing()||document.hidden)return;event.preventDefault();if(event.repeat||held.has(key))return;held.add(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.add('pressed');if(key==='j'||key==='l')setGripper(key==='j');else keyboardStep();});
 window.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(!moveKeys.has(key))return;held.delete(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.remove('pressed');});
 window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);document.addEventListener('focusin',()=>{if(editing())clearKeys();});setInterval(keyboardStep,80);
 document.querySelectorAll('button:not(.close),input,select').forEach(b=>b.disabled=true);
