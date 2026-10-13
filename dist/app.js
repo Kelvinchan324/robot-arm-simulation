@@ -40,16 +40,6 @@ function rebuild(){for(const mesh of [...geomMeshes,...jointMarkers]){scene.remo
   for(let i=0;i<m.ngeom;i++){const c=m.geom_rgba.slice(i*4,i*4+4);const material=new THREE.MeshStandardMaterial({color:new THREE.Color().setRGB(c[0],c[1],c[2],THREE.LinearSRGBColorSpace),roughness:.55,metalness:.2,opacity:c[3],transparent:c[3]<1,side:THREE.DoubleSide});const mesh=new THREE.Mesh(makeGeometry(i),material);mesh.userData.geom=i;scene.add(mesh);geomMeshes.push(mesh);}
   for(const j of engine.joints){const mesh=new THREE.Mesh(new THREE.SphereGeometry(.005,20,16),new THREE.MeshStandardMaterial({color:0x5de2ed,metalness:.4,roughness:.35}));scene.add(mesh);jointMarkers.push(mesh);}
   $('sliders').replaceChildren();engine.joints.forEach((j,i)=>{const angle=jointAngles[i],unit=j.slide?'m':'°';const div=document.createElement('div');div.className='joint';const top=document.createElement('div');top.className='joint-top';const label=document.createElement('label');label.htmlFor=`q${i}`;label.textContent=j.name==='gripper_drive'?'Gripper':j.name.replaceAll('_',' ');const number=document.createElement('input');number.id=`n${i}`;number.type='number';number.min=angle.lo.toFixed(6);number.max=angle.hi.toFixed(6);number.step=j.slide?.001:.1;number.setAttribute('aria-label',`${j.name} ${unit}`);top.append(label,number);const slider=document.createElement('input');slider.id=`q${i}`;slider.type='range';slider.min=number.min;slider.max=number.max;slider.step='any';const limits=document.createElement('div');limits.className='joint-limits';limits.innerHTML=`<span>${angle.lo.toFixed(j.slide?2:0)}${unit}${j.name==='gripper_drive'?' closed':''}</span><span>${angle.hi.toFixed(j.slide?2:0)}${unit}${j.name==='gripper_drive'?' open':''}</span>`;const change=e=>{cancelSolve();pauseKeyboard();const value=Number(e.target.value);if(!Number.isFinite(value)||e.target.value==='')return;const q=engine.q;q[i]=angle.fromDisplay(value);engine.q=q;update();$('solver-result').textContent='Pose changed · solve to match target';};slider.addEventListener('input',change);number.addEventListener('change',change);div.append(top,slider,limits);$('sliders').append(div);});
-  const gripperIndex=engine.joints.findIndex(j=>j.name==='gripper_drive');
-  if(gripperIndex!==-1){
-    const buttons=document.createElement('div');buttons.className='button-row gripper-buttons';
-    for(const [id,label,angle] of [['open-gripper','Open gripper',90],['close-gripper','Close gripper',-90]]){
-      const button=document.createElement('button');button.id=id;button.textContent=label;
-      button.onclick=()=>{cancelSolve();clearKeys();const q=engine.q;q[gripperIndex]=jointAngles[gripperIndex].fromDisplay(angle);engine.q=q;update();if(keyboardEnabled)$('canvas').focus();};
-      buttons.append(button);
-    }
-    $('keyboard').insertBefore(buttons,$('keyboard-status'));
-  }
   $('joint-count').textContent=`${engine.joints.length} CONTROLS`;trace=[];traceLine.geometry.setFromPoints([]);update();home();
 }
 function update(){if(!engine?.model)return;updateTargetLines();if(jog)$('pitch-value').textContent=`Tool pitch ${(jog.pitch()*180/Math.PI).toFixed(1)}°`;const d=engine.data;geomMeshes.forEach((mesh,i)=>{mesh.position.fromArray(d.geom_xpos,i*3);const r=d.geom_xmat.slice(i*9,i*9+9);matrix4.set(r[0],r[1],r[2],0,r[3],r[4],r[5],0,r[6],r[7],r[8],0,0,0,0,1);mesh.quaternion.setFromRotationMatrix(matrix4);});jointMarkers.forEach((mesh,i)=>{mesh.position.fromArray(d.xanchor,engine.joints[i].id*3);mesh.visible=$('axes').checked;});const {p,r}=engine.pose();toolAxes.position.set(...p);matrix4.set(r[0],r[1],r[2],0,r[3],r[4],r[5],0,r[6],r[7],r[8],0,0,0,0,1);toolAxes.quaternion.setFromRotationMatrix(matrix4);['px','py','pz'].forEach((id,i)=>$(id).textContent=p[i].toFixed(3));const values=[r[0],r[1],r[2],p[0],r[3],r[4],r[5],p[1],r[6],r[7],r[8],p[2],0,0,0,1];$('matrix').innerHTML=values.map(v=>`<span>${Math.abs(v)<.00005?'0.000':v.toFixed(3)}</span>`).join('');engine.q.forEach((q,i)=>{const j=engine.joints[i],v=jointAngles[i].toDisplay(q);$(`q${i}`).value=v;$(`n${i}`).value=(Math.abs(v)<.000001?0:v).toFixed(j.slide?3:1);});if($('trail').checked){if(!trace.length||trace.at(-1).distanceTo(new THREE.Vector3(...p))>.001){trace.push(new THREE.Vector3(...p));if(trace.length>1200)trace.shift();traceLine.geometry.dispose();traceLine.geometry=new THREE.BufferGeometry().setFromPoints(trace);}}}
@@ -83,7 +73,12 @@ $('target-height').oninput=()=>{$('tz').value=$('target-height').value;targetCha
 $('solve').onclick=solveTarget;
 $('use-current').onclick=()=>{engine.pose().p.forEach((v,i)=>$(['tx','ty','tz'][i]).value=v.toFixed(5));targetChange();$('solver-result').textContent='Target = current position';};
 $('home-view').onclick=home;$('axes').onchange=()=>{axes.visible=toolAxes.visible=$('axes').checked;update();};$('trail').onchange=()=>{trace=[];traceLine.geometry.setFromPoints([]);update();};$('reset').onclick=()=>{cancelSolve();pauseKeyboard();engine.q=engine.joints.map(()=>0);update();};$('example').onclick=example;
-const held=new Set(),moveKeys=new Set(['w','s','a','d','arrowup','arrowdown','arrowleft','arrowright']);
+const held=new Set(),moveKeys=new Set(['w','s','a','d','arrowup','arrowdown','arrowleft','arrowright','o','c']);
+function setGripper(open){
+  const i=engine.joints.findIndex(j=>j.name==='gripper_drive');if(i<0)return;
+  cancelSolve();const q=engine.q;q[i]=jointAngles[i].fromDisplay(open?90:-90);engine.q=q;update();
+  keyboardStatus(open?'On · gripper open':'On · gripper closed');
+}
 const editing=()=>document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
 function clearKeys(){held.clear();document.querySelectorAll('kbd').forEach(k=>k.classList.remove('pressed'));}
 function keyboardStatus(text){if($('keyboard-status').textContent!==text)$('keyboard-status').textContent=text;}
@@ -99,7 +94,7 @@ function keyboardStep(){
   if(!Object.values(motion).some(Boolean))return;
   const ok=jog.step(motion);if(ok){syncJog();keyboardStatus('On · pitch held');}else keyboardStatus('Limit reached · try another direction');
 }
-window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(key==='escape'){pauseKeyboard();setPickMode(false);return;}if(event.ctrlKey||event.altKey||event.metaKey){clearKeys();return;}if(!keyboardEnabled||!moveKeys.has(key)||editing())return;event.preventDefault();if(event.repeat||held.has(key))return;held.add(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.add('pressed');keyboardStep();});
+window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(key==='escape'){pauseKeyboard();setPickMode(false);return;}if(event.ctrlKey||event.altKey||event.metaKey){clearKeys();return;}if(!keyboardEnabled||!moveKeys.has(key)||editing()||document.hidden)return;event.preventDefault();if(event.repeat||held.has(key))return;held.add(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.add('pressed');if(key==='o'||key==='c')setGripper(key==='o');else keyboardStep();});
 window.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(!moveKeys.has(key))return;held.delete(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.remove('pressed');});
 window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);document.addEventListener('focusin',()=>{if(editing())clearKeys();});setInterval(keyboardStep,80);
 document.querySelectorAll('button:not(.close),input,select').forEach(b=>b.disabled=true);
