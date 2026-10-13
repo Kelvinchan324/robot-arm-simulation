@@ -32,6 +32,9 @@ POSITION_MODE_CONFIRMED = False
 PORT = '/dev/ttyUSB0'
 BAUDRATE = 115200  # Pi <-> ESP32 transparent forwarding, not servo bus baud.
 SDK_MODULE = 'scservo_sdk'  # Change only if your compatible SDK has another name.
+SYNC_READ = True       # Supplied SDK's GroupSyncRead for all five STS motors.
+# Set False explicitly only for a controller that supports individual reads
+# but not sync-read forwarding. Communication errors never auto-fallback.
 SERVO_IDS = dict(base_yaw=1, shoulder=2, elbow=3, wrist_pitch=4, gripper_drive=5)
 MAX_JOINT_DEG_PER_SECOND = dict(base_yaw=10, shoulder=10, elbow=10, wrist_pitch=10, gripper_drive=30)
 SERVO_SPEED = 100       # Nonzero STS speed in encoder steps/second.
@@ -52,6 +55,6 @@ def settings():
                             raw_limits=RAW_LIMITS[name], safe_degrees=span,
                             max_deg_s=MAX_JOINT_DEG_PER_SECOND[name], speed=SERVO_SPEED,
                             acceleration=SERVO_ACCELERATION)
-    return dict(port=PORT, baudrate=BAUDRATE, sdk_module=SDK_MODULE, servo_family='sms_sts',
+    return dict(port=PORT, baudrate=BAUDRATE, sdk_module=SDK_MODULE, servo_family='sms_sts', sync_read=SYNC_READ,
                 calibration_confirmed=CALIBRATION_CONFIRMED,
                 position_mode_confirmed=POSITION_MODE_CONFIRMED, servos=servos)

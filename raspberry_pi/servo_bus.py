@@ -33,7 +33,7 @@ class Calibration:
             for pair in (c.degrees, c.ticks, c.raw_limits, c.safe_degrees):
                 if pair.shape != (2,) or not np.isfinite(pair).all():
                     raise ValueError('Fill both measured calibration values')
-            if type(c.servo_id) is not int or not 1 <= c.servo_id <= 253:
+            if type(c.servo_id) is not int or not 1 <= c.servo_id <= 252:
                 raise ValueError('Invalid servo ID')
             if not c.degrees[0] < c.degrees[1] or c.ticks[0] == c.ticks[1]:
                 raise ValueError('Calibration needs two distinct positions and increasing joint degrees')
@@ -115,40 +115,83 @@ class ServoBus:
             if not self.port.setBaudRate(config['baudrate']):
                 raise OSError('Could not open serial port at configured baud')
             self.handler = getattr(sdk, family)(self.port)
+            self.reader = None
+            if family == 'sms_sts' and config.get('sync_read', True):
+                # Same 11-byte position-through-moving block as the user's
+                # sync_read_write.py. Mode/torque are checked separately.
+                self.reader = sdk.GroupSyncRead(self.handler, 56, 11)
             self.read_degrees(check_mode=True)
         except Exception:
             if getattr(self.port, 'is_open', False):
                 self.port.closePort()
             raise
 
-    def checked(self, result, error=0):
+    def checked(self, result, error=0, servo_id=None):
         if result != self.success or error:
-            raise OSError(f'Servo communication/error status: result={result}, error={error}')
+            detail = []
+            if result != self.success and hasattr(self.handler, 'getTxRxResult'):
+                detail.append(self.handler.getTxRxResult(result))
+            if error and hasattr(self.handler, 'getRxPacketError'):
+                detail.append(self.handler.getRxPacketError(error))
+            label = f'ID {servo_id}' if servo_id is not None else 'Servo bus'
+            raise OSError(f'{label}: result={result}, error={error}; {"; ".join(filter(None, detail))}')
 
     def read_degrees(self, check_mode=False):
+        if self.closed:
+            raise OSError('Servo bus is closed')
         values = []
         for c in self.maps:
             if check_mode:
                 torque, result, error = self.handler.read1ByteTxRx(c.servo_id, 40)
-                self.checked(result, error)
+                self.checked(result, error, c.servo_id)
                 if torque != 1:
                     raise ValueError(f'ID {c.servo_id}: torque is not enabled; support arm and enable it using vendor tools')
                 if self.config['servo_family'] == 'sms_sts':
                     mode, result, error = self.handler.read1ByteTxRx(c.servo_id, 33)
-                    self.checked(result, error)
+                    self.checked(result, error, c.servo_id)
                     if mode != 0:
                         raise ValueError(f'ID {c.servo_id}: not in position mode')
                 else:
-                    lo, result, error = self.handler.read2ByteTxRx(c.servo_id, 9); self.checked(result, error)
-                    hi, result, error = self.handler.read2ByteTxRx(c.servo_id, 11); self.checked(result, error)
+                    lo, result, error = self.handler.read2ByteTxRx(c.servo_id, 9); self.checked(result, error, c.servo_id)
+                    hi, result, error = self.handler.read2ByteTxRx(c.servo_id, 11); self.checked(result, error, c.servo_id)
                     if lo == 0 and hi == 0:
                         raise ValueError(f'ID {c.servo_id}: SC wheel mode detected')
-            pos, result, error = self.handler.ReadPos(c.servo_id)
-            self.checked(result, error)
-            values.append(c.from_raw(pos))
+            if self.reader is None:
+                pos, result, error = self.handler.ReadPos(c.servo_id)
+                self.checked(result, error, c.servo_id)
+                values.append(c.from_raw(pos))
+        if self.reader is not None:
+            values = self._read_sync_degrees()
         return np.array(values)
 
+    def _read_sync_degrees(self):
+        group = self.reader
+        # This SDK retains data across reads and can report COMM_SUCCESS when
+        # an earlier ID failed but the last ID succeeded. Never reuse a sample.
+        group.clearParam()
+        try:
+            for c in self.maps:
+                if not group.addParam(c.servo_id):
+                    raise OSError(f'Could not queue feedback for ID {c.servo_id}')
+            self.checked(group.txRxPacket())
+            values = []
+            for c in self.maps:
+                # The supplied SDK returns (available, servo_error), NOT bool.
+                available, error = group.isAvailable(c.servo_id, 56, 11)
+                if not available:
+                    raise OSError(f'ID {c.servo_id}: incomplete or corrupt sync-read feedback')
+                self.checked(self.success, error, c.servo_id)
+                raw = self.handler.scs_tohost(group.getData(c.servo_id, 56, 2), 15)
+                values.append(c.from_raw(raw))
+            if not group.last_result:
+                raise OSError('Incomplete sync-read feedback')
+            return values
+        finally:
+            group.clearParam()
+
     def write_degrees(self, degrees):
+        if self.closed:
+            raise OSError('Servo bus is closed')
         if len(degrees) != 5:
             raise ValueError('Expected five motor targets')
         targets = [c.to_raw(v) for c, v in zip(self.maps, degrees)]

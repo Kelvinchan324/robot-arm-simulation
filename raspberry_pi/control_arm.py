@@ -25,6 +25,7 @@ def run_keys(args):
         raise ValueError('Select a local keyboard with --list-keyboards, then --keyboard /dev/input/eventN')
     robot = Robot()
     settings, bus = config.settings(), None
+    settings.update(port=args.port, baudrate=args.baudrate)
     maps = calibrated_joints(settings, robot) if args.live else None
     rates = [m.max_deg_s for m in maps] if maps else list(config.MAX_JOINT_DEG_PER_SECOND[n] for n in NAMES)
     controller = Controller(robot, rates, config.SPEED_SCALE)
@@ -131,6 +132,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true', help='Use calibrated STS3215 hardware; default is dry-run')
     parser.add_argument('--keyboard', help='Local Linux keyboard event device')
+    parser.add_argument('--port', default=config.PORT, help='Serial device (default: config.PORT)')
+    parser.add_argument('--baudrate', type=int, default=config.BAUDRATE)
     parser.add_argument('--list-keyboards', action='store_true')
     parser.add_argument('--demo', action='store_true', help='Finite offline test; no keyboard/serial access')
     args = parser.parse_args()

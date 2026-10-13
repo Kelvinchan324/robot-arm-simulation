@@ -88,7 +88,7 @@ class KeyboardTests(unittest.TestCase):
 def test_config():
     # Synthetic calibration for mocked hardware only, not this real robot.
     s = dict(port='/test', baudrate=115200, sdk_module='scservo_sdk', servo_family='sms_sts',
-             position_mode_confirmed=True, calibration_confirmed=True, servos={})
+             position_mode_confirmed=True, calibration_confirmed=True, sync_read=False, servos={})
     for i, name in enumerate(NAMES):
         s['servos'][name] = dict(id=i+1, joint_degrees=[-10, 10], raw_positions=[1900, 2100] if i != 4 else [2100, 1900],
                                   raw_limits=[1800, 2200], safe_degrees=[-10, 10], max_deg_s=10, speed=100, acceleration=20)

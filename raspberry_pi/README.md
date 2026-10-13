@@ -20,7 +20,7 @@ jog equations match the browser. NumPy evaluates the transforms; MuJoCo and the
 hinge/slide model, not a general MJCF engine.
 
 **Hardware calibration is still required.** The code is tested against browser
-MuJoCo results and a mocked serial bus, not your physical arm. It deliberately
+MuJoCo results and your supplied SDK with an emulated serial device, not your physical arm. It deliberately
 starts in dry-run mode and refuses live operation with blank calibration.
 
 ## 1. Install on the Pi
@@ -39,8 +39,8 @@ Use the Waveshare SDK already working with your motors. The expected import is:
 from scservo_sdk import PortHandler, sms_sts
 ```
 
-The adapter uses `ReadPos`, `SyncWritePosEx`, `groupSyncWrite.txPacket` and
-`read1ByteTxRx`. If your package has a different import name but provides this
+The adapter uses `GroupSyncRead`, `ReadPos`, `SyncWritePosEx`,
+`groupSyncWrite.txPacket` and `read1ByteTxRx`. If your package has a different import name but provides this
 same API, edit `SDK_MODULE` in `config.py`. Older `PacketHandler` APIs are not
 interchangeable with `sms_sts` without an adapter.
 
@@ -60,6 +60,25 @@ The script does not flash firmware, change IDs, rewrite EEPROM, change servo
 mode, or turn torque on automatically. Serial forwarding and position mode
 must already be working.
 
+### Checked against your supplied examples
+
+The supplied `read_write.py` uses **115200 baud and `/dev/ttyUSB1`**;
+`sync_read_write.py` uses **1000000 baud and `/dev/ttyUSB0`**, addressing IDs 1–10.
+This controller keeps your requested **115200, `/dev/ttyUSB0`, IDs 1–5**.
+It sends bounded, calibrated targets instead of the examples' full 0–4095 sweep.
+
+The supplied `GroupSyncRead.isAvailable()` returns `(available, error)`, not a
+boolean. Its `txRxPacket()` can report success when an earlier ID has a missing
+or corrupt reply but the last ID succeeds. The adapter checks each complete
+11-byte reply, its error byte and the group's completion flag, and clears
+cached responses before and after every read. Communication failures never
+automatically switch to a different read method. `SYNC_READ=False` explicitly
+selects individual reads if your board's forwarding firmware requires them.
+
+The SDK's `setBaudRate()` already opens the port. The controller calls it once
+at the requested baud, avoiding the example's initial open at the SDK default.
+The original SDK and example files are left unchanged.
+
 ## 2. Set the raw reference values at the top of config.py
 
 The first editable block is `RAW_AT_REFERENCE`, one entry for each of IDs 1–5.
@@ -72,6 +91,8 @@ Use the read-only helper to display current raw positions:
 ```sh
 python raspberry_pi/read_positions.py
 python raspberry_pi/read_positions.py --watch
+# If Linux assigned your adapter USB1, override the port for this run:
+python raspberry_pi/read_positions.py --port /dev/ttyUSB1 --baudrate 115200
 ```
 
 For each joint, measure two known poses using the website's calibrated joint
@@ -132,6 +153,8 @@ Pi's normal device permissions. Q releases the keyboard and exits.
 
 ```sh
 python raspberry_pi/control_arm.py --live --keyboard /dev/input/eventN
+# Optional per-run override (otherwise uses config.py):
+python raspberry_pi/control_arm.py --live --keyboard /dev/input/eventN --port /dev/ttyUSB1 --baudrate 115200
 ```
 
 Press **E** to enable and level the wrist, matching the website's Enable + level
@@ -157,8 +180,11 @@ Near singularities the controller reduces a requested Cartesian step to stay
 within joint-rate limits; unreachable steps are rolled back. Motor speed and
 acceleration are configured separately in `config.py`.
 
-Five targets are sent together using an SDK sync-write packet. The script
-monitors position feedback and stops on communication errors, excessive tracking
+Five targets are sent together using an SDK sync-write packet. A successful
+sync-write means the packet was sent; broadcast writes have no motor acknowledgement.
+The script reads positions together using the same 56–66 register block as your
+sync-read example, checks torque and position mode on each active tick, and
+stops on communication errors, excessive tracking
 error, lost keyboard events or a delayed control loop. Startup feedback is used
 to initialise FK; during motion the solver tracks its commanded pose and checks
 the measured pose against it. It is not a calibrated dynamics/torque controller.
@@ -198,3 +224,17 @@ Fixtures compare 16 poses including every coupled body, levelling, translation,
 yaw, pitch, unreachable rollback and position IK against the actual MuJoCo WASM
 browser engine. Hash checks detect stale source/model references. Passing these
 tests verifies software agreement, not the physical robot calibration.
+
+To include the packet-level tests against your exact, unmodified SDK:
+
+```sh
+export SCSERVO_SDK_PATH="/absolute/path/to/scservo_sdk"
+python -m unittest discover -s raspberry_pi/tests -v
+```
+
+`SCSERVO_SDK_PATH` points to the package itself, whereas `PYTHONPATH` above
+points to its parent. These additional tests replace only the serial device;
+the actual SDK builds and parses the packets. They verify five-motor write
+payloads, missing replies, checksums, stale feedback, servo errors, signed raw
+positions, mode/torque checks and failed transmissions without opening hardware.
+They are skipped when `SCSERVO_SDK_PATH` is unset.
