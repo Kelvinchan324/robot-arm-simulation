@@ -55,7 +55,7 @@ def run_keys(args):
             bus = ServoBus(settings, maps)
             robot.q = robot.from_display(bus.read_degrees())
         print('LIVE' if bus else 'DRY RUN - no serial connection or motor commands')
-        print('E enable + level | W/S Z | arrows yaw/reach | A/D pitch | J/L open/close | Esc pause | Q quit')
+        print('E enable + level | W/S Z | arrows yaw/reach | A/D pitch | hold J/L open/close | Esc pause | Q quit')
         print('Keyboard is exclusive while running. Escape/Q hold the arm; they do not remove motor power.')
         next_tick, previous_tick, last_print = time.monotonic(), time.monotonic(), 0
         while not quit_requested:

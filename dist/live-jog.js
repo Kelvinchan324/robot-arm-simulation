@@ -1,20 +1,18 @@
 import {CartesianJog} from './jog.js';
+import {stepGripper} from './gripper-jog.js';
 // Bounded counterpart of raspberry_pi/controller.py; same Cartesian equations.
 export class LiveJog{
   constructor(engine,angles,profile){this.engine=engine;this.angles=angles;this.profile=profile;this.jog=new CartesianJog(engine);this.held=new Set();this.stop();}
-  stop(){this.enabled=false;this.held.clear();this.levelTarget=null;this.gripperTarget=null;this.status='Paused';}
+  stop(){this.enabled=false;this.held.clear();this.levelTarget=null;this.status='Paused';}
   enable(){
     const q=this.engine.q;
     if(!this.jog.levelWrist()){this.status='Cannot level at this wrist limit';return false;}
-    this.levelTarget=this.engine.q[3];this.engine.q=q;this.held.clear();this.gripperTarget=null;this.enabled=true;this.status='Levelling wrist';return true;
+    this.levelTarget=this.engine.q[3];this.engine.q=q;this.held.clear();this.enabled=true;this.status='Levelling wrist';return true;
   }
   key(key,down){
-    if(!down){this.held.delete(key);return;}
+    if(!down){this.held.delete(key);if(this.enabled&&(key==='j'||key==='l')&&!this.held.has('j')&&!this.held.has('l'))this.status=this.levelTarget===null?'On · pitch held':'Levelling wrist';return;}
     if(!this.enabled||this.held.has(key))return;
     this.held.add(key);
-    if(key==='j'||key==='l'){
-      const j=this.engine.joints[4];this.gripperTarget=Math.max(j.lo,Math.min(j.hi,this.angles[4].fromDisplay(key==='j'?90:-90)));
-    }
   }
   tick(dt=.08){
     if(!this.enabled)return false;
@@ -36,7 +34,8 @@ export class LiveJog{
         if(!moved)e.q=before;this.status=moved?'On · pitch held':'Limit reached';
       }
     }
-    if(this.gripperTarget!==null){const q=e.q;q[4]=ramp(q[4],this.gripperTarget,max[4]);e.q=q;if(Math.abs(q[4]-this.gripperTarget)<1e-9)this.gripperTarget=null;}
+    const direction=Number(this.held.has('j'))-Number(this.held.has('l'));
+    if(stepGripper(e,this.angles,direction,dt,this.profile.maps[4].max_deg_s))this.status=direction>0?'Opening gripper':'Closing gripper';
     return e.q.some((q,i)=>q!==before[i]);
   }
 }

@@ -5,6 +5,7 @@ from kinematics import CartesianJog
 
 MOVE_KEYS = {'w', 's', 'a', 'd', 'up', 'down', 'left', 'right'}
 CONTROL_KEYS = MOVE_KEYS | {'j', 'l'}
+GRIPPER_DEG_PER_SECOND = 30.0  # Displayed opening scale; full travel takes 6 s.
 
 
 class Controller:
@@ -16,12 +17,12 @@ class Controller:
         if not math.isfinite(speed_scale) or not 0 < speed_scale <= 1:
             raise ValueError('speed_scale must be in (0, 1]')
         self.speed_scale = speed_scale
-        self.held, self.enabled, self.level_target, self.gripper_target = set(), False, None, None
+        self.held, self.enabled, self.level_target = set(), False, None
         self.status = 'Off'
 
     def stop(self):
         self.enabled = False; self.held.clear()
-        self.level_target = self.gripper_target = None
+        self.level_target = None
         self.status = 'Off - holding position'
 
     def enable(self):
@@ -30,13 +31,16 @@ class Controller:
             self.status = 'Cannot level at current wrist limits'; return False
         self.level_target = self.robot.q[3]
         self.robot.q = initial
-        self.held.clear(); self.gripper_target = None; self.enabled = True
+        self.held.clear(); self.enabled = True
         self.status = 'Levelling wrist'; return True
 
     def key(self, key, down):
         key = key.lower()
         if not down:
-            self.held.discard(key); return
+            self.held.discard(key)
+            if self.enabled and key in ('j', 'l') and not self.held.intersection({'j', 'l'}):
+                self.status = 'On - pitch held' if self.level_target is None else 'Levelling wrist'
+            return
         if key == 'escape':
             self.stop(); return
         if key == 'e':
@@ -46,11 +50,6 @@ class Controller:
         if not self.enabled or key not in CONTROL_KEYS or key in self.held:
             return
         self.held.add(key)
-        if key in ('j', 'l'):
-            desired = (90 if key == 'j' else -90)
-            raw = (desired-self.robot.offset[4])/self.robot.gain[4]
-            self.gripper_target = float(np.clip(raw, self.robot.lo[4], self.robot.hi[4]))
-            self.status = 'Opening gripper' if key == 'j' else 'Closing gripper'
 
     def tick(self, dt=.08):
         if not self.enabled:
@@ -86,10 +85,13 @@ class Controller:
                 if not moved:
                     self.robot.q = before
                 self.status = 'On - pitch held' if moved else 'Limit reached'
-        if self.gripper_target is not None:
+        direction = int('j' in self.held) - int('l' in self.held)
+        if direction:
             q = self.robot.q
-            q[4] += np.clip(self.gripper_target-q[4], -max_step[4], max_step[4])
+            # Same displayed-angle increment as dist/gripper-jog.js. Respect
+            # measured travel bounds and any lower per-servo rate limit.
+            step = direction * min(self.rates[4], GRIPPER_DEG_PER_SECOND) * dt
+            q[4] = np.clip(q[4] + step/self.robot.gain[4], self.robot.lo[4], self.robot.hi[4])
             self.robot.q = q
-            if abs(q[4]-self.gripper_target) < 1e-9:
-                self.gripper_target = None
+            self.status = 'Opening gripper' if direction > 0 else 'Closing gripper'
         return not np.array_equal(before, self.robot.q)

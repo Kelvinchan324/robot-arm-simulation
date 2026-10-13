@@ -37,6 +37,8 @@ SYNC_READ = True       # Supplied SDK's GroupSyncRead for all five STS motors.
 # but not sync-read forwarding. Communication errors never auto-fallback.
 SERVO_IDS = dict(base_yaw=1, shoulder=2, elbow=3, wrist_pitch=4, gripper_drive=5)
 MAX_JOINT_DEG_PER_SECOND = dict(base_yaw=10, shoulder=10, elbow=10, wrist_pitch=10, gripper_drive=30)
+# Hold J/L to jog. Gripper opening is capped at 30 display degrees/second;
+# lower gripper_drive above to move more slowly (also exported to the browser).
 SERVO_SPEED = 100       # Nonzero STS speed in encoder steps/second.
 SERVO_ACCELERATION = 20 # STS SDK acceleration parameter.
 SPEED_SCALE = 0.25     # 1.0 requests the browser's 2.5 mm / 1.5 degree per 80 ms.

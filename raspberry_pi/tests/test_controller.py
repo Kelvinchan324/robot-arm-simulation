@@ -70,11 +70,13 @@ class KeyboardTests(unittest.TestCase):
             if c.level_target is None: break
         self.assertIsNone(c.level_target)
         self.assertAlmostEqual(c.jog.pitch(), 0, places=6)
-        c.key('j', True); c.key('j', False)
+        c.key('j', True)
         for _ in range(100): c.tick()
+        c.key('j', False)
         self.assertAlmostEqual(robot.display()[4], 90)
-        c.key('l', True); c.key('l', False)
+        c.key('l', True)
         for _ in range(100): c.tick()
+        c.key('l', False)
         self.assertAlmostEqual(robot.display()[4], -90)
         c.key('w', True); before = robot.pose()[0]; pitch = c.jog.pitch()
         c.tick(); self.assertGreater(robot.pose()[0][2], before[2])
@@ -82,7 +84,30 @@ class KeyboardTests(unittest.TestCase):
         c.key('w', False); q = robot.q; c.tick(); np.testing.assert_array_equal(q, robot.q)
         c.key('j', True); c.tick(); c.key('escape', True); q = robot.q
         c.tick(); np.testing.assert_array_equal(q, robot.q)
-        self.assertFalse(c.enabled); self.assertIsNone(c.gripper_target)
+        self.assertFalse(c.enabled); self.assertFalse(c.held)
+
+    def test_gripper_hold_release_reverse_and_slow_limits(self):
+        robot = Robot(); c = Controller(robot); c.enabled = True
+        q = robot.q; q[4] = robot.from_display([0, 0, 0, 0, 0])[4]; robot.q = q
+        c.key('j', True)
+        for _ in range(10): c.tick()
+        self.assertAlmostEqual(robot.display()[4], 24)
+        c.key('j', False); q = robot.q
+        for _ in range(20): self.assertFalse(c.tick())
+        np.testing.assert_array_equal(robot.q, q)
+        c.key('j', True); c.key('l', True); self.assertFalse(c.tick())
+        c.key('j', False); c.tick()
+        self.assertAlmostEqual(robot.display()[4], 21.6)
+        for _ in range(100): c.tick()
+        self.assertAlmostEqual(robot.display()[4], -90)
+        self.assertFalse(c.tick()); c.key('l', False)
+        bounds = sorted((d-robot.offset[4])/robot.gain[4] for d in (-10, 10))
+        robot.lo[4], robot.hi[4] = bounds
+        q = robot.q; q[4] = -robot.offset[4]/robot.gain[4]; robot.q = q
+        c.rates[4] = 5; c.key('j', True); c.tick(2)
+        self.assertAlmostEqual(robot.display()[4], .4)
+        for _ in range(100): c.tick()
+        self.assertAlmostEqual(robot.display()[4], 10)
 
 
 def test_config():

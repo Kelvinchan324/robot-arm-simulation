@@ -9,6 +9,7 @@ import {LiveJog} from '../dist/live-jog.js';
 import {HardwareSession} from '../dist/hardware-session.js';
 import {RobotEngine} from '../dist/engine.js';
 import {calibrateJointAngles} from '../dist/joint-angles.js';
+import {stepGripper} from '../dist/gripper-jog.js';
 
 class FakePort{
   constructor(){this.sent=[];this.missing=new Set();this.errors={};this.corrupt=false;this.raw=[2000,2001,2002,2003,2004];}
@@ -105,8 +106,32 @@ test('live keyboard levels gradually, respects rates and pitch, and stops grippe
   assert.equal(c.levelTarget,null);assert.ok(Math.abs(c.jog.pitch())<.0002);
   const height=f.engine.pose().p[2];c.key('w',true);c.tick();c.key('w',false);
   assert.ok(f.engine.pose().p[2]>height);assert.ok(Math.abs(c.jog.pitch())<.0002);
-  c.key('j',true);c.key('j',false);for(let i=0;i<100;i++)c.tick();assert.ok(Math.abs(f.angles[4].toDisplay(f.engine.q[4])-90)<1e-6);
+  c.key('j',true);for(let i=0;i<100;i++)c.tick();c.key('j',false);assert.ok(Math.abs(f.angles[4].toDisplay(f.engine.q[4])-90)<1e-6);
   c.key('l',true);c.tick();c.stop();const stopped=f.engine.q;for(let i=0;i<10;i++)c.tick();assert.deepEqual(f.engine.q,stopped);destroy(f);
+});
+test('simulation and USB gripper jog agree at intermediate angles, release, reversal and limits',()=>{
+  const sim=fixture(),live=fixture(),c=new LiveJog(live.engine,live.angles,live.profile);
+  c.enabled=true;
+  for(const f of [sim,live]){const q=f.engine.q;q[4]=f.angles[4].fromDisplay(0);f.engine.q=q;}
+  const jawGap=f=>{const ids=['jaw_a','jaw_b'].map(n=>f.engine.bodies.find(b=>b.name===n).id);return Math.hypot(...[0,1,2].map(i=>f.engine.data.xpos[ids[0]*3+i]-f.engine.data.xpos[ids[1]*3+i]));};
+  const initialGap=jawGap(sim),pinion=sim.engine.bodies.find(b=>b.name==='gripper_pinion').id;
+  const initialRotation=Array.from(sim.engine.data.xmat.slice(pinion*9,pinion*9+9));
+  c.key('j',true);
+  for(let i=0;i<10;i++){stepGripper(sim.engine,sim.angles,1,.08);c.tick(.08);assert.deepEqual(sim.engine.q,live.engine.q);}
+  assert.ok(Math.abs(sim.angles[4].toDisplay(sim.engine.q[4])-24)<1e-8);
+  assert.ok(jawGap(sim)>initialGap);
+  assert.notDeepEqual(Array.from(sim.engine.data.xmat.slice(pinion*9,pinion*9+9)),initialRotation);
+  c.key('j',false);const released=live.engine.q;for(let i=0;i<20;i++)assert.equal(c.tick(),false);assert.deepEqual(live.engine.q,released);
+  c.key('j',true);c.key('l',true);assert.equal(c.tick(),false); // Opposite keys cancel.
+  c.key('j',false);c.tick();assert.ok(Math.abs(live.angles[4].toDisplay(live.engine.q[4])-21.6)<1e-8);
+  for(let i=0;i<100;i++)c.tick();assert.ok(Math.abs(live.angles[4].toDisplay(live.engine.q[4])+90)<1e-8);
+  assert.equal(c.tick(),false);c.key('l',false);
+  // Reduced calibrated travel and speed must also constrain the gripper.
+  [live.engine.joints[4].lo,live.engine.joints[4].hi]=[-10,10].map(d=>live.angles[4].fromDisplay(d)).sort((a,b)=>a-b);
+  const q=live.engine.q;q[4]=live.angles[4].fromDisplay(0);live.engine.q=q;live.profile.maps[4].max_deg_s=5;
+  c.key('j',true);c.tick(2);assert.ok(Math.abs(live.angles[4].toDisplay(live.engine.q[4])-.4)<1e-8);
+  for(let i=0;i<100;i++)c.tick();assert.ok(Math.abs(live.angles[4].toDisplay(live.engine.q[4])-10)<1e-8);
+  destroy(sim);destroy(live);
 });
 class FeedbackBus{
   constructor(f){this.raw=f.engine.q.map((q,i)=>f.profile.maps[i].toRaw(f.angles[i].toDisplay(q)));this.writes=[];this.mode=0;this.torque=1;}

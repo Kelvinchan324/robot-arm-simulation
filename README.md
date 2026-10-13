@@ -12,8 +12,11 @@ movement, 3D targets, and the tool-to-world transformation together.
 - Enter an XYZ target or select **Pick target in 3D** for inverse kinematics.
 - Enable keyboard control: W/S moves vertically, left/right changes yaw,
   up/down moves forward/back, and A/D adjusts tool pitch. Translation holds pitch.
-- With keyboard control enabled, press **J** to open the gripper (+90 degrees)
-  or **L** to close it (-90 degrees). Shortcuts are inactive while editing fields.
+- With keyboard control enabled, **hold J** to open the gripper toward +90°
+  or **hold L** to close it toward -90°. Release to stop changing the angle.
+  The gripper moves at 30 displayed degrees/second (six seconds for full travel);
+  the pinion and jaws follow every intermediate angle. Shortcuts are inactive
+  while editing fields.
 
 The solver respects joint limits and attempts the closest position it finds.
 This is a kinematics teaching model, without collision avoidance or validated dynamics.

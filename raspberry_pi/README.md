@@ -172,12 +172,16 @@ chosen pitch.
 | Left / Right | Base yaw left / right |
 | Up / Down | Forward / backward in the arm's yaw plane |
 | A / D | Pitch up / down while holding tool centre |
-| J / L | Open / close gripper to the calibrated safe endpoint |
+| Hold J / L | Gradually open / close; release to stop changing the target |
 | E | Enable + level / pause |
 | Escape | Pause and hold measured position |
 | Q | Stop commands, hold measured position, exit |
 
-The gripper ramps toward its endpoint after a key press; Escape cancels it.
+Hold J/L to change the gripper angle at up to 30 displayed degrees/second
+(six seconds for the full -90° to +90° range). Releasing the key stops further
+increments; the servo may finish its last small commanded step. Holding both
+keys cancels gripper motion. Measured travel limits and any lower
+`MAX_JOINT_DEG_PER_SECOND['gripper_drive']` limit still apply. Escape pauses all motion.
 Levelling also ramps before Cartesian jogging begins. Default requested jogging
 speed is 25% of the browser, with joint-rate limits. Set `SPEED_SCALE=1.0` only
 after checking the mechanism if you want the browser's nominal step rate.
@@ -206,7 +210,7 @@ calibration, backlash, flex or misassembled joints.
 
 - `config.py`: raw reference values, calibration, IDs, serial port and speeds.
 - `kinematics.py`: FK, calibrated angles, position IK and pitch-constrained jogging.
-- `controller.py`: key state, levelling, gripper ramps and rate-limited jogging.
+- `controller.py`: key state, levelling, hold-to-move gripper control and rate-limited jogging.
 - `servo_bus.py`: calibration conversion and Waveshare SDK commands/feedback.
 - `control_arm.py`: Pi keyboard loop, dry-run/live modes and stop handling.
 - `read_positions.py`: read-only raw position calibration aid.

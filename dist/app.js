@@ -6,6 +6,7 @@ import {CartesianJog} from './jog.js';
 import {PointTarget} from './point-target.js';
 import {calibrateJointAngles} from './joint-angles.js';
 import {setupHardware} from './hardware-ui.js';
+import {stepGripper} from './gripper-jog.js';
 const $=id=>document.getElementById(id);
 let jointAngles=[],jog,keyboardEnabled=false,pointPicker,solveRevision=0;
 let engine,commandEngine,hardware,geomMeshes=[],jointMarkers=[],trace=[],robotConfig=null;
@@ -24,7 +25,8 @@ const targetStem=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedM
 const errorLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedMaterial({color:0xe1b976,dashSize:.007,gapSize:.004,depthTest:false}));scene.add(errorLine);errorLine.renderOrder=4;
 const traceLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x5de2ed,transparent:true,opacity:.6}));scene.add(traceLine);
 const matrix4=new THREE.Matrix4();
-function frame(){requestAnimationFrame(frame);orbit.update();renderer.render(scene,camera);}frame();
+let previousFrame=performance.now();
+function frame(now=performance.now()){requestAnimationFrame(frame);const dt=(now-previousFrame)/1000;previousFrame=now;if(dt>0)simulationGripperStep(dt);orbit.update();renderer.render(scene,camera);}frame();
 new ResizeObserver(()=>{const {width,height}=$('canvas').getBoundingClientRect();renderer.setSize(width,height);camera.aspect=width/height;camera.updateProjectionMatrix();}).observe($('canvas'));
 function home(){const box=new THREE.Box3();geomMeshes.forEach(m=>box.expandByObject(m));const center=box.isEmpty()?new THREE.Vector3(0,0,.2):box.getCenter(new THREE.Vector3());const size=box.isEmpty()?.6:Math.max(box.getSize(new THREE.Vector3()).length(),.3);orbit.target.copy(center);camera.position.copy(center).add(new THREE.Vector3(size*1.25,-size*1.8,size*1.0));camera.near=Math.max(.0001,size/10000);camera.far=Math.max(100,size*100);camera.updateProjectionMatrix();orbit.update();}
 function makeGeometry(i){const m=engine.model,s=m.geom_size.slice(3*i,3*i+3),t=m.geom_type[i];let geo;
@@ -76,10 +78,10 @@ $('solve').onclick=solveTarget;
 $('use-current').onclick=()=>{engine.pose().p.forEach((v,i)=>$(['tx','ty','tz'][i]).value=v.toFixed(5));targetChange();$('solver-result').textContent='Target = current position';};
 $('home-view').onclick=home;$('axes').onchange=()=>{axes.visible=toolAxes.visible=$('axes').checked;update();};$('trail').onchange=()=>{trace=[];traceLine.geometry.setFromPoints([]);update();};$('reset').onclick=()=>{cancelSolve();pauseKeyboard();engine.q=engine.joints.map(()=>0);update();};$('example').onclick=example;
 const held=new Set(),moveKeys=new Set(['w','s','a','d','arrowup','arrowdown','arrowleft','arrowright','j','l']);
-function setGripper(open){
-  const i=engine.joints.findIndex(j=>j.name==='gripper_drive');if(i<0)return;
-  cancelSolve();const q=engine.q;q[i]=jointAngles[i].fromDisplay(open?90:-90);engine.q=q;update();
-  keyboardStatus(open?'On · gripper open':'On · gripper closed');
+function simulationGripperStep(dt){
+  if(!keyboardEnabled||hardware?.locked()||!engine?.model||editing()||document.hidden)return;
+  const direction=Number(held.has('j'))-Number(held.has('l'));
+  if(stepGripper(engine,jointAngles,direction,dt)){syncJog();keyboardStatus(direction>0?'On · opening gripper':'On · closing gripper');}
 }
 const editing=()=>document.activeElement?.matches('input,textarea,select,[contenteditable="true"]');
 function clearKeys(){held.clear();document.querySelectorAll('kbd').forEach(k=>k.classList.remove('pressed'));}
@@ -96,8 +98,8 @@ function keyboardStep(){
   if(!Object.values(motion).some(Boolean))return;
   const ok=jog.step(motion);if(ok){syncJog();keyboardStatus('On · pitch held');}else keyboardStatus('Limit reached · try another direction');
 }
-window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(key==='escape'){pauseKeyboard();setPickMode(false);return;}if(event.ctrlKey||event.altKey||event.metaKey){clearKeys();return;}if(!keyboardEnabled||!moveKeys.has(key)||editing()||document.hidden)return;event.preventDefault();if(event.repeat||held.has(key))return;held.add(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.add('pressed');if(key==='j'||key==='l')setGripper(key==='j');else keyboardStep();});
-window.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(!moveKeys.has(key))return;held.delete(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.remove('pressed');});
+window.addEventListener('keydown',event=>{const key=event.key.toLowerCase();if(key==='escape'){pauseKeyboard();setPickMode(false);return;}if(event.ctrlKey||event.altKey||event.metaKey){clearKeys();return;}if(!keyboardEnabled||!moveKeys.has(key)||editing()||document.hidden)return;event.preventDefault();if(event.repeat||held.has(key))return;held.add(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.add('pressed');if(key!=='j'&&key!=='l')keyboardStep();});
+window.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(!moveKeys.has(key))return;held.delete(key);document.querySelector(`kbd[data-key="${key}"]`)?.classList.remove('pressed');if(keyboardEnabled&&(key==='j'||key==='l')&&!held.has('j')&&!held.has('l'))keyboardStatus('On · hold a key');});
 window.addEventListener('blur',clearKeys);document.addEventListener('visibilitychange',clearKeys);document.addEventListener('focusin',()=>{if(editing())clearKeys();});setInterval(keyboardStep,80);
 document.querySelectorAll('button:not(.close),input,select').forEach(b=>b.disabled=true);
 try{

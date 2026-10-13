@@ -55,11 +55,14 @@ monitor before connecting, because only one program can own the port.
    | Left / Right | Base yaw |
    | Up / Down | Forward / backward in the yaw plane |
    | A / D | Tool pitch while holding tool centre |
-   | J / L | Open / close gripper to its calibrated safe endpoint |
+   | Hold J / L | Gradually open / close; release to stop changing the target |
    | E | Enable + level / pause |
    | Escape | Pause and request a hold at the measured pose |
 
-   J/L starts a gradual move to the endpoint; Escape cancels it. Live jogging
+   Hold J/L to change the gripper angle at up to 30 displayed degrees/second,
+   respecting any lower profile rate and calibrated travel limits. Release to
+   stop further increments; the servo may finish its last small commanded step.
+   Holding both keys cancels gripper motion. Escape pauses all motion. Live jogging
    defaults to 25% of the simulation's requested step rate and applies the
    per-joint rate limits from your profile. The 3D view displays the last
    complete measured pose; it does not instantly jump to a requested endpoint.
