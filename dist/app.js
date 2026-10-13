@@ -17,7 +17,12 @@ try {renderer=new THREE.WebGLRenderer({antialias:true});}catch(e){$('loading').t
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;$('canvas').appendChild(renderer.domElement);
 const orbit=new OrbitControls(camera,renderer.domElement);orbit.enableDamping=true;
 scene.add(new THREE.HemisphereLight(0xd8f1ff,0x13263a,2.5));const sun=new THREE.DirectionalLight(0xffffff,3);sun.position.set(1,-2,3);scene.add(sun);
-const grid=new THREE.GridHelper(2,40,0x285169,0x142d40);grid.rotation.x=Math.PI/2;grid.position.z=-.002;scene.add(grid);
+let grid;
+function replaceGrid(light){
+  if(grid){scene.remove(grid);grid.geometry.dispose();grid.material.dispose();}
+  grid=new THREE.GridHelper(2,40,light?0x7895a2:0x285169,light?0xc8d5da:0x142d40);grid.rotation.x=Math.PI/2;grid.position.z=-.002;scene.add(grid);
+}
+replaceGrid(false);
 const axes=new THREE.AxesHelper(.12);scene.add(axes);const toolAxes=new THREE.AxesHelper(.075);scene.add(toolAxes);
 const target=new THREE.Mesh(new THREE.SphereGeometry(.008,20,12),new THREE.MeshBasicMaterial({color:0xe1b976,depthTest:false}));scene.add(target);target.visible=true;target.renderOrder=5;
 const targetRing=new THREE.Mesh(new THREE.TorusGeometry(.018,.001,8,32),new THREE.MeshBasicMaterial({color:0xe1b976,depthTest:false}));target.add(targetRing);targetRing.renderOrder=5;
@@ -25,6 +30,16 @@ const targetStem=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedM
 const errorLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineDashedMaterial({color:0xe1b976,dashSize:.007,gapSize:.004,depthTest:false}));scene.add(errorLine);errorLine.renderOrder=4;
 const traceLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x5de2ed,transparent:true,opacity:.6}));scene.add(traceLine);
 const matrix4=new THREE.Matrix4();
+function applyTheme(theme){
+  const light=theme==='light';document.documentElement.dataset.theme=light?'light':'dark';
+  $('theme-toggle').innerHTML=light?'<span aria-hidden="true">☾</span> Dark mode':'<span aria-hidden="true">☀</span> Light mode';
+  $('theme-toggle').setAttribute('aria-pressed',String(light));$('theme-toggle').setAttribute('aria-label',light?'Switch to dark mode':'Switch to light mode');
+  scene.background.set(light?'#edf4f7':'#08121d');
+  replaceGrid(light);
+  try{localStorage.setItem('robot-arm-theme',light?'light':'dark');}catch{}
+}
+$('theme-toggle').onclick=()=>applyTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+applyTheme(document.documentElement.dataset.theme);
 let previousFrame=performance.now();
 function frame(now=performance.now()){requestAnimationFrame(frame);const dt=(now-previousFrame)/1000;previousFrame=now;if(dt>0)simulationGripperStep(dt);orbit.update();renderer.render(scene,camera);}frame();
 new ResizeObserver(()=>{const {width,height}=$('canvas').getBoundingClientRect();renderer.setSize(width,height);camera.aspect=width/height;camera.updateProjectionMatrix();}).observe($('canvas'));
