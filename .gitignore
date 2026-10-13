@@ -4,4 +4,7 @@ robot-arm-lab/
 
 __pycache__/
 cad-export/
+.venv/
+raspberry_pi/scservo_sdk/
+raspberry_pi/scservosdk/
 

@@ -47,3 +47,11 @@ node tools/test-joint-angles.mjs
 See [README.txt](README.txt) for CAD conversion details and model limitations.
 URDF, MuJoCo XML and OBJ meshes are in `dist/robot`.
 Third-party MuJoCo and Three.js licenses are retained in `dist/vendor`.
+
+## Raspberry Pi hardware control
+
+[raspberry_pi/README.md](raspberry_pi/README.md) contains the Python controller
+for Waveshare ESP32 + STS3215 servos (IDs 1–5, `/dev/ttyUSB0`, 115200 baud).
+It uses the same robot geometry, calibrated angles and keyboard kinematics,
+including J/L gripper control. Edit the raw reference/calibration values at the
+top of `raspberry_pi/config.py` before live operation; dry-run is the default.
