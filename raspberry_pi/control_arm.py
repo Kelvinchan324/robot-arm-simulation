@@ -13,22 +13,49 @@ from controller import Controller
 from servo_bus import ServoBus, calibrated_joints
 
 
+def detect_keyboard(InputDevice, ecodes, list_devices):
+    """Pick a full keyboard deterministically; close all discovery handles."""
+    required = {ecodes.KEY_W, ecodes.KEY_E, ecodes.KEY_Q,
+                ecodes.KEY_UP, ecodes.KEY_DOWN, ecodes.KEY_LEFT, ecodes.KEY_RIGHT}
+    denied = False
+    for path in sorted(list_devices()):
+        device = None
+        try:
+            device = InputDevice(path)
+            if required.issubset(device.capabilities().get(ecodes.EV_KEY, [])):
+                return path
+        except PermissionError:
+            denied = True
+        except OSError:
+            continue
+        finally:
+            if device is not None:
+                device.close()
+    if denied:
+        raise PermissionError('Cannot read keyboard devices. Grant your user access to /dev/input, then log in again.')
+    raise ValueError('No connected keyboard found. Connect a USB keyboard to the Pi; SSH keystrokes are not input-device events.')
+
+
 def run_keys(args):
     from evdev import InputDevice, ecodes, list_devices
     if args.list_keyboards:
         for path in list_devices():
-            with InputDevice(path) as dev:
+            dev = InputDevice(path)
+            try:
                 if ecodes.KEY_W in dev.capabilities().get(ecodes.EV_KEY, []):
                     print(path, dev.name)
+            finally:
+                dev.close()
         return
     if not args.keyboard:
-        raise ValueError('Select a local keyboard with --list-keyboards, then --keyboard /dev/input/eventN')
+        args.keyboard = detect_keyboard(InputDevice, ecodes, list_devices)
+    print('Using keyboard:', args.keyboard)
     robot = Robot()
     settings, bus = config.settings(), None
     settings.update(port=args.port, baudrate=args.baudrate)
     maps = calibrated_joints(settings, robot) if args.live else None
     rates = [m.max_deg_s for m in maps] if maps else list(config.MAX_JOINT_DEG_PER_SECOND[n] for n in NAMES)
-    controller = Controller(robot, rates, config.SPEED_SCALE)
+    controller = Controller(robot, rates, config.SPEED_SCALE, latched_keys=config.LATCHED_KEYS)
     if not math.isfinite(config.MAX_TRACKING_ERROR_DEG) or config.MAX_TRACKING_ERROR_DEG <= 0:
         raise ValueError('Tracking threshold must be positive')
     if not math.isfinite(config.LOOP_TIMEOUT_SECONDS) or config.LOOP_TIMEOUT_SECONDS < .08:
@@ -36,6 +63,13 @@ def run_keys(args):
     codes = {getattr(ecodes, 'KEY_'+key.upper()): key for key in
              ('w', 's', 'a', 'd', 'j', 'l', 'up', 'down', 'left', 'right', 'e', 'q')}
     codes[ecodes.KEY_ESC] = 'escape'
+    codes[ecodes.KEY_SPACE] = 'space'
+    period = config.CONTROL_PERIOD_SECONDS
+    if not math.isfinite(period) or not .01 <= period <= .08:
+        raise ValueError('Control period must be between 0.01 and 0.08 seconds')
+    health_period = config.HEALTH_CHECK_PERIOD_SECONDS
+    if not math.isfinite(health_period) or not 0 < health_period <= .5:
+        raise ValueError('Health check period must be positive and at most 0.5 seconds')
     modifier_codes = {ecodes.KEY_LEFTCTRL, ecodes.KEY_RIGHTCTRL, ecodes.KEY_LEFTALT,
                       ecodes.KEY_RIGHTALT, ecodes.KEY_LEFTMETA, ecodes.KEY_RIGHTMETA}
     device, grabbed, quit_requested = None, False, False
@@ -55,9 +89,11 @@ def run_keys(args):
             bus = ServoBus(settings, maps)
             robot.q = robot.from_display(bus.read_degrees())
         print('LIVE' if bus else 'DRY RUN - no serial connection or motor commands')
-        print('E enable + level | W/S Z | arrows yaw/reach | A/D pitch | hold J/L open/close | Esc pause | Q quit')
+        print('E enable + level | W/S Z | arrows yaw/reach | A/D pitch | J/L open/close | Space stop | Esc pause | Q quit')
+        print('Tap a direction to move continuously; another direction replaces it.' if controller.latched_keys else 'Hold a direction to move; release to stop.')
         print('Keyboard is exclusive while running. Escape/Q hold the arm; they do not remove motor power.')
         next_tick, previous_tick, last_print = time.monotonic(), time.monotonic(), 0
+        last_health, health_index, cycle_ms = -math.inf, 0, 0
         while not quit_requested:
             readable, _, _ = select.select([device.fd], [], [], max(0, next_tick-time.monotonic()))
             if readable:
@@ -79,7 +115,7 @@ def run_keys(args):
                         robot.q = robot.from_display(bus.read_degrees(check_mode=True))
                     was_enabled = controller.enabled
                     controller.key(key, event.value == 1)
-                    if was_enabled and not controller.enabled and bus:
+                    if bus and ((was_enabled and not controller.enabled) or (key == 'space' and event.value == 1)):
                         bus.hold_measured()
                         robot.q = robot.from_display(bus.read_degrees())
             if quit_requested:
@@ -89,29 +125,44 @@ def run_keys(args):
                 continue
             if controller.enabled and now-previous_tick > config.LOOP_TIMEOUT_SECONDS:
                 raise TimeoutError('Control loop exceeded timeout; stopping')
+            dt = min(.08, max(period, now-previous_tick))
             previous_tick = now
             # Reconcile physical key state too, protecting against missed releases.
             active = set(device.active_keys())
-            controller.held.intersection_update(codes[c] for c in active if c in codes)
+            if not controller.latched_keys:
+                controller.held.intersection_update(codes[c] for c in active if c in codes)
+            if ecodes.KEY_SPACE in active and (controller.held or controller.level_target is not None):
+                controller.key('space', True)
+                if bus:
+                    bus.hold_measured()
+                    robot.q = robot.from_display(bus.read_degrees())
             if controller.enabled and active & modifier_codes:
                 controller.stop()
                 if bus: bus.hold_measured()
             if controller.enabled and bus:
-                measured = bus.read_degrees(check_mode=True)
+                check_health = now-last_health >= health_period/len(maps)
+                health_ids = [maps[health_index].servo_id] if check_health else []
+                measured = bus.read_degrees(check_mode=check_health, health_ids=health_ids)
+                if check_health:
+                    last_health = now
+                    health_index = (health_index+1) % len(maps)
                 if np.max(np.abs(measured-robot.display())) > config.MAX_TRACKING_ERROR_DEG:
                     raise RuntimeError('Servo tracking error exceeds limit; stopping')
-            changed = controller.tick(.08)
+            previous_degrees = robot.display()
+            changed = controller.tick(dt)
             # A slow IK solve must not emit a stale command after the watchdog.
             if controller.enabled and time.monotonic()-now > config.LOOP_TIMEOUT_SECONDS:
                 raise TimeoutError('IK/feedback exceeded timeout; stopping')
             if changed and bus:
-                bus.write_degrees(robot.display())
+                bus.write_degrees(robot.display(), previous=previous_degrees, duration=dt)
+            cycle_ms = (time.monotonic()-now)*1000
             if time.monotonic()-last_print >= .4:
                 print(controller.status, '| deg', np.round(robot.display(), 1).tolist(),
-                      '| XYZ m', np.round(robot.pose()[0], 4).tolist(), flush=True)
+                      '| XYZ m', np.round(robot.pose()[0], 4).tolist(),
+                      '| cycle ms', round(cycle_ms, 1), flush=True)
                 last_print = time.monotonic()
             # No burst of catch-up commands after a delayed tick.
-            next_tick = max(now+.08, time.monotonic())
+            next_tick = max(now+period, time.monotonic())
     finally:
         controller.stop()
         if bus:
@@ -131,7 +182,7 @@ def run_keys(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--live', action='store_true', help='Use calibrated STS3215 hardware; default is dry-run')
-    parser.add_argument('--keyboard', help='Local Linux keyboard event device')
+    parser.add_argument('--keyboard', help='Override the automatically detected Linux keyboard event device')
     parser.add_argument('--port', default=config.PORT, help='Serial device (default: config.PORT)')
     parser.add_argument('--baudrate', type=int, default=config.BAUDRATE)
     parser.add_argument('--list-keyboards', action='store_true')

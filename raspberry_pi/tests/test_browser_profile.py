@@ -7,8 +7,11 @@ import export_browser_profile
 
 class BrowserProfileTests(unittest.TestCase):
     def test_unmeasured_calibration_is_not_exported(self):
-        with self.assertRaisesRegex(ValueError, 'calibration'):
-            export_browser_profile.profile()
+        settings = export_browser_profile.config.settings()
+        settings['servos']['base_yaw']['raw_positions'] = [None, None]
+        with patch.object(export_browser_profile.config, 'settings', return_value=settings):
+            with self.assertRaisesRegex(ValueError, 'calibration'):
+                export_browser_profile.profile()
 
     def test_export_preserves_measured_motor_mapping(self):
         settings = test_config()
@@ -25,3 +28,16 @@ class BrowserProfileTests(unittest.TestCase):
         with patch.object(export_browser_profile.config, 'settings', return_value=settings):
             with self.assertRaisesRegex(ValueError, 'position mode'):
                 export_browser_profile.profile()
+
+    def test_configured_arm_mapping_and_cad_limits(self):
+        from kinematics import Robot
+        from servo_bus import calibrated_joints
+        robot = Robot()
+        self.assertFalse(export_browser_profile.config.settings()['sync_read'])
+        maps = calibrated_joints(export_browser_profile.config.settings(), robot)
+        for i, mapping in enumerate(maps):
+            self.assertEqual(mapping.to_raw(0), 2048)
+            self.assertEqual(mapping.to_raw(45), 1536 if i == 4 else 2560)
+            self.assertAlmostEqual(mapping.from_raw(2048), 0)
+        profile = export_browser_profile.profile()
+        self.assertEqual(profile['servos']['elbow']['safe_degrees'], [-90, 104])

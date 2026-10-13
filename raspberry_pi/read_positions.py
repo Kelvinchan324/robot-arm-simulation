@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only STS3215 raw position helper; never writes motor registers."""
 import argparse
-import importlib
+from servo_bus import load_sdk
 import time
 import config
 from kinematics import NAMES
@@ -13,7 +13,7 @@ def main():
     parser.add_argument('--port', default=config.PORT, help='Serial device (default: config.PORT)')
     parser.add_argument('--baudrate', type=int, default=config.BAUDRATE)
     args = parser.parse_args()
-    sdk = importlib.import_module(config.SDK_MODULE)
+    sdk = load_sdk(config.settings())
     port = sdk.PortHandler(args.port)
     try:
         if not port.setBaudRate(args.baudrate):

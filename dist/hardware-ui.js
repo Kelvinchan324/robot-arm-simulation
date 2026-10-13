@@ -8,7 +8,7 @@ export function setupHardware({engine,commandEngine,angles,onFeedback,onLock,onP
   const hasControlFocus=()=>!document.hidden&&document.hasFocus()&&document.activeElement===$('canvas');
   const state=text=>{$('serial-status').textContent=text;};
   function controls(){
-    const locked=!!session||connecting||disconnecting;
+    const locked=!!session?.active||connecting||disconnecting;
     $('serial-connect').disabled=locked||loadingProfile||!navigator.serial;
     $('serial-disconnect').disabled=!session||disconnecting;
     $('profile-file').disabled=locked;$('serial-baud').disabled=locked;
@@ -28,10 +28,11 @@ export function setupHardware({engine,commandEngine,angles,onFeedback,onLock,onP
     finally{loadingProfile=false;controls();}
   };
   $('serial-connect').onclick=async()=>{
-    if(connecting||session||loadingProfile)return;connecting=true;onPauseSimulation();controls();
+    if(connecting||session?.active||disconnecting||loadingProfile)return;connecting=true;onPauseSimulation();controls();
     let link;
     try{
       // Browser device permission is requested only by this user's click.
+      if(session){await session.disconnect();session=null;}
       const port=await navigator.serial.requestPort();
       state('Connecting…');link=new SerialLink(port);await link.open(Number($('serial-baud').value));
       session=new HardwareSession({link,engine:commandEngine,angles,profile,canMove:hasControlFocus,
@@ -41,7 +42,7 @@ export function setupHardware({engine,commandEngine,angles,onFeedback,onLock,onP
           $('pose-source').textContent=degrees?'LIVE · MEASURED':'SIM · UNCALIBRATED';
           $('pose-source').classList.toggle('live',!!degrees);
         },onState:text=>{state(text);controls();},onFault:error=>{
-          state(`${error.message} · disconnect to retry`);$('pose-source').textContent='FEEDBACK LOST';$('pose-source').classList.remove('live');controls();
+          state(`${error.message} · Connect USB to retry`);$('pose-source').textContent='FEEDBACK LOST';$('pose-source').classList.remove('live');controls();
         }});
       await session.start();
     }catch(error){
@@ -78,5 +79,5 @@ export function setupHardware({engine,commandEngine,angles,onFeedback,onLock,onP
   document.addEventListener('focusin',()=>{if(editing())pause();});
   window.addEventListener('pagehide',()=>{session?.disconnect().catch(()=>{});});
   if(!navigator.serial)state('USB control needs desktop Chrome or Edge. Simulation is available.');
-  controls();return {locked:()=>!!session||connecting||disconnecting,pause};
+  controls();return {locked:()=>!!session?.active||connecting||disconnecting,pause};
 }

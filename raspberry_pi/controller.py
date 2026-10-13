@@ -9,13 +9,14 @@ GRIPPER_DEG_PER_SECOND = 30.0  # Displayed opening scale; full travel takes 6 s.
 
 
 class Controller:
-    def __init__(self, robot, max_deg_s=(10, 10, 10, 10, 30), speed_scale=.25):
+    def __init__(self, robot, max_deg_s=(10, 10, 10, 10, 30), speed_scale=.25, latched_keys=False):
         self.robot, self.jog = robot, CartesianJog(robot)
         self.rates = np.asarray(max_deg_s, float)
         if self.rates.shape != (5,) or not np.isfinite(self.rates).all() or np.any(self.rates <= 0):
             raise ValueError('Five positive joint rate limits required')
         if not math.isfinite(speed_scale) or not 0 < speed_scale <= 1:
             raise ValueError('speed_scale must be in (0, 1]')
+        self.latched_keys = latched_keys
         self.speed_scale = speed_scale
         self.held, self.enabled, self.level_target = set(), False, None
         self.status = 'Off'
@@ -37,9 +38,15 @@ class Controller:
     def key(self, key, down):
         key = key.lower()
         if not down:
+            if self.latched_keys and key in CONTROL_KEYS:
+                return
             self.held.discard(key)
             if self.enabled and key in ('j', 'l') and not self.held.intersection({'j', 'l'}):
                 self.status = 'On - pitch held' if self.level_target is None else 'Levelling wrist'
+            return
+        if key == 'space':
+            self.held.clear(); self.level_target = None
+            self.status = 'On - stopped' if self.enabled else 'Off - holding position'
             return
         if key == 'escape':
             self.stop(); return
@@ -49,6 +56,8 @@ class Controller:
             return
         if not self.enabled or key not in CONTROL_KEYS or key in self.held:
             return
+        if self.latched_keys:
+            self.held.clear()
         self.held.add(key)
 
     def tick(self, dt=.08):

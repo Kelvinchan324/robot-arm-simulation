@@ -97,6 +97,14 @@ class VendorSDKTests(unittest.TestCase):
         self.addCleanup(self.bus.close)
         self.serial = self.bus.port.ser
 
+    def test_individual_reads_discard_bytes_from_previous_transaction(self):
+        self.bus.reader = None
+        self.serial.incoming.extend(b'\xff\xff\x01\x03\x00\x00\x00')
+        np.testing.assert_array_equal(self.bus.read_degrees(check_mode=True), [0]*5)
+        self.serial.corrupt = {1}
+        with self.assertRaisesRegex(OSError, 'ID 1.*Incorrect status packet'):
+            self.bus.read_degrees()
+
     def test_startup_only_reads_at_requested_baud(self):
         self.assertEqual(self.serial.baudrate, 115200)
         self.assertFalse(self.serial.rts)
@@ -104,6 +112,24 @@ class VendorSDKTests(unittest.TestCase):
         self.assertEqual([p[4] for p in self.serial.packets], [2]*10+[0x82])
         self.assertEqual(self.serial.packets[-1][5:-1], bytes([56, 11, 1, 2, 3, 4, 5]))
         np.testing.assert_array_equal(self.bus.read_degrees(), [0]*5)
+
+    def test_trajectory_write_scales_each_motor_speed_to_interval(self):
+        self.bus.write_degrees([1, 2, 0, 4, 5], previous=[0]*5, duration=.2)
+        payload = self.serial.packets[-1][7:-1]
+        speeds = [int.from_bytes(payload[i*8+6:i*8+8], 'little') for i in range(5)]
+        self.assertEqual(speeds, [50, 100, 1, 100, 100])
+        count = len(self.serial.packets)
+        with self.assertRaises(ValueError):
+            self.bus.write_degrees([0]*5, previous=[0]*5, duration=0)
+        self.assertEqual(len(self.serial.packets), count)
+
+    def test_health_checks_can_be_distributed_without_skipping_positions(self):
+        self.bus.reader = None
+        before = len(self.serial.packets)
+        self.bus.read_degrees(check_mode=True, health_ids=[3])
+        packets = self.serial.packets[before:]
+        self.assertEqual([(p[2], p[5]) for p in packets if p[5] in (33,40)], [(3,40),(3,33)])
+        self.assertEqual([p[2] for p in packets if p[5] == 56], [1,2,3,4,5])
 
     def test_sync_write_exact_registers_and_five_targets(self):
         self.bus.write_degrees([1, 2, 3, 4, 5])

@@ -6,30 +6,61 @@ A browser-based MuJoCo robot arm lab using the Fusion 360 assembly geometry.
 Students can explore forward and inverse kinematics, joint angles, keyboard
 movement, 3D targets, and the tool-to-world transformation together.
 
-## Use
+## Start the website
 
-- Adjust joint sliders for forward kinematics.
-- Enter an XYZ target or select **Pick target in 3D** for inverse kinematics.
-- Enable keyboard control: W/S moves vertically, left/right changes yaw,
-  up/down moves forward/back, and A/D adjusts tool pitch. Translation holds pitch.
-- With keyboard control enabled, **hold J** to open the gripper toward +90°
-  or **hold L** to close it toward -90°. Release to stop changing the angle.
-  The gripper moves at 30 displayed degrees/second (six seconds for full travel);
-  the pinion and jaws follow every intermediate angle. Shortcuts are inactive
-  while editing fields.
-
-The solver respects joint limits and attempts the closest position it finds.
-This is a kinematics teaching model, without collision avoidance or validated dynamics.
-
-## Run locally
-
-Serve `dist` with a static HTTP server, for example:
+From the repository folder:
 
 ```sh
-python -m http.server 8000 --directory dist
+python3 start.py
 ```
 
-Open http://localhost:8000. All simulation libraries, meshes and robot files are bundled.
+Open http://localhost:8000. Press Ctrl+C in the terminal to stop the server.
+The simulation libraries and robot assets are bundled.
+
+## Move the simulated arm
+
+Use the joint sliders for forward kinematics, or enter XYZ / **Pick target in
+3D** for inverse kinematics. Enable keyboard control and focus the 3D view:
+
+| Keys | Movement |
+| --- | --- |
+| W / S | Up / down |
+| Left / Right | Base yaw |
+| Up / Down | Forward / backward |
+| A / D | Tool pitch |
+| Hold J / L | Open / close gripper; release to stop |
+| E / Escape | Enable or pause / pause |
+
+Translations hold tool pitch. Gripper motion is 30 displayed degrees per
+second. Shortcuts pause while editing fields. The solver respects joint limits;
+this teaching model has no collision avoidance or validated dynamics.
+
+## Control the real arm
+
+Choose either connection method. Both use the simulation's model, calibrated
+joint angles and pitch-constrained kinematics.
+
+| Method | How to start | Setup |
+| --- | --- | --- |
+| Website USB | Desktop Chrome/Edge → **Connect USB** → **Enable keys + level** | [USB setup and troubleshooting](raspberry_pi/WEB_SERIAL.md) |
+| Raspberry Pi | `python raspberry_pi/control_arm.py --live` | [Pi installation and calibration](raspberry_pi/README.md) |
+
+On the Pi, `python raspberry_pi/control_arm.py` starts keyboard control in
+**dry-run** mode without motors. It automatically detects a physically connected
+keyboard. Press **E** to enable, tap a direction for continuous movement, press **Space**
+to stop, and **Q** to exit; no keyboard picker is needed. This continuous mode
+applies to the Pi controller; the website uses hold-to-move controls.
+SSH typing does not provide the key-release events required by this controller.
+
+The Pi configuration includes your existing STS3215 project settings (2048
+zero positions, signed 4096/360 scales and restricted travel). Website startup
+is read-only and shows real encoder feedback; load your exported calibration
+to enable motion. Use one connection method at a time.
+
+If the website reports a lost device, close other serial applications and check
+USB power, the cable, and ESP32 **Start Serial Forwarding** mode at **115200 baud**.
+After a fault, **Connect USB** lets you reconnect directly. A physical USB failure
+still stops commands; the software cannot restore a disconnected device.
 
 ## Publish
 
@@ -50,17 +81,3 @@ node tools/test-joint-angles.mjs
 See [README.txt](README.txt) for CAD conversion details and model limitations.
 URDF, MuJoCo XML and OBJ meshes are in `dist/robot`.
 Third-party MuJoCo and Three.js licenses are retained in `dist/vendor`.
-
-## Raspberry Pi hardware control
-
-The website now supports **direct USB serial keyboard control** in desktop
-Chrome/Edge. The 3D arm follows measured STS3215 positions; FK/IK edits are
-disabled while connected. See [Web Serial setup](raspberry_pi/WEB_SERIAL.md)
-to export your measured calibration, connect the ESP32 board and use the same
-W/S, arrow, A/D and J/L keys. The initial connection is read-only.
-
-[raspberry_pi/README.md](raspberry_pi/README.md) contains the Python controller
-for Waveshare ESP32 + STS3215 servos (IDs 1–5, `/dev/ttyUSB0`, 115200 baud).
-It uses the same robot geometry, calibrated angles and keyboard kinematics,
-including J/L gripper control. Edit the raw reference/calibration values at the
-top of `raspberry_pi/config.py` before live operation; dry-run is the default.

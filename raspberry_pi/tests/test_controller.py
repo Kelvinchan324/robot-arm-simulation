@@ -59,6 +59,27 @@ class BrowserParity(unittest.TestCase):
 
 
 class KeyboardTests(unittest.TestCase):
+    def test_latched_direction_switch_space_and_resume(self):
+        robot = Robot(); c = Controller(robot, latched_keys=True)
+        c.enabled = True
+        c.key('j', True); c.key('j', False)
+        before = robot.display()[4]
+        for _ in range(5): c.tick(.04)
+        self.assertGreater(robot.display()[4], before)
+        c.key('l', True); c.key('l', False)
+        self.assertEqual(c.held, {'l'})
+        before = robot.display()[4]; c.tick(.04)
+        self.assertLess(robot.display()[4], before)
+        c.key('space', True)
+        q = robot.q
+        for _ in range(5): self.assertFalse(c.tick(.04))
+        np.testing.assert_array_equal(robot.q, q)
+        self.assertTrue(c.enabled)
+        c.key('j', True); self.assertTrue(c.tick(.04))
+        c.key('escape', True); self.assertFalse(c.enabled)
+        self.assertFalse(c.held)
+
+
     def test_enable_rates_keys_and_stop(self):
         robot = Robot(); c = Controller(robot)
         q = robot.q
@@ -146,8 +167,10 @@ FAKE_SDK = SimpleNamespace(COMM_SUCCESS=0, PortHandler=FakePort, sms_sts=FakeHan
 
 class HardwareBoundaryTests(unittest.TestCase):
     def test_unconfigured_live_refused(self):
+        settings = config.settings()
+        settings['servos']['base_yaw']['raw_positions'] = [None, None]
         with self.assertRaisesRegex(ValueError, 'calibration'):
-            calibrated_joints(config.settings(), Robot())
+            calibrated_joints(settings, Robot())
 
     def test_calibration_direction_and_round_trip(self):
         maps = calibrated_joints(test_config(), Robot())

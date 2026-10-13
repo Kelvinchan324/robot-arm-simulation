@@ -30,7 +30,6 @@ class FakePort{
       }
     }});
   }
-  async setSignals(s){this.signals=s;}
   async close(){this.closed=true;}
 }
 
@@ -52,10 +51,29 @@ test('parser handles fragmentation, noise, concatenation and checksum failure',(
 test('Web Serial stream reads all IDs and closes its locks',async()=>{
   const port=new FakePort(),link=new SerialLink(port);await link.open();
   const states=await link.readAll([1,2,3,4,5],{health:true});
-  assert.equal(port.options.baudRate,115200);assert.equal(port.signals.dataTerminalReady,false);
+  assert.equal(port.options.baudRate,115200);
   assert.deepEqual(states.map(s=>s.raw),port.raw);assert.ok(states.every(s=>s.speed===-25&&s.mode===0&&s.torque===1));
   assert.ok(port.sent.every(p=>p[4]===2||p[4]===0x82));
   await link.close();assert.equal(port.readable.locked,false);assert.equal(port.writable.locked,false);assert.ok(port.closed);
+});
+test('recoverable idle UART error replaces reader without poisoning connection',async()=>{
+  const port=new FakePort(),link=new SerialLink(port);await link.open();
+  await link.readAll([1,2,3,4,5]);
+  const old=port.readable,oldRx=port.rx;
+  port.readable=new ReadableStream({start:c=>port.rx=c});
+  oldRx.error(new DOMException('UART framing error','FramingError'));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal(old.locked,false);assert.equal(link.failure,null);
+  assert.deepEqual((await link.readAll([1,2,3,4,5])).map(s=>s.raw),port.raw);
+  await link.close();assert.equal(port.readable.locked,false);
+});
+test('recoverable UART error during feedback still stops the transaction',async()=>{
+  const port=new FakePort(),link=new SerialLink(port);await link.open();
+  port.missing=new Set([1,2,3,4,5]);
+  const reading=link.readAll([1,2,3,4,5]);
+  port.rx.error(new DOMException('UART framing error','FramingError'));
+  await assert.rejects(reading,/framing/);assert.ok(link.failure);
+  await link.close();
 });
 test('missing early ID poisons link; a later response cannot authorize movement',async()=>{
   const port=new FakePort(),link=new SerialLink(port,{timeout:25});await link.open();

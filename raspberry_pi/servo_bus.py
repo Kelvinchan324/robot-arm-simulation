@@ -7,8 +7,30 @@ mechanical and must not be assigned additional motors here.
 from dataclasses import dataclass
 import importlib
 import math
+import sys
+import time
+from pathlib import Path
 import numpy as np
 from kinematics import NAMES
+
+
+def load_sdk(settings):
+    """Use an installed SDK, or the permanently configured vendor directory."""
+    module = settings.get('sdk_module', 'scservo_sdk')
+    try:
+        return importlib.import_module(module)
+    except ModuleNotFoundError as ex:
+        if ex.name != module.split('.')[0]:
+            raise  # Missing SDK dependency, rather than the SDK itself.
+        parent = settings.get('sdk_parent_dir')
+        if not parent or not (Path(parent).expanduser() / module.split('.')[0]).is_dir():
+            raise ImportError(f'{module} not found. Set SDK_PARENT_DIR in raspberry_pi/config.py to the folder containing the SDK.') from ex
+        parent = str(Path(parent).expanduser().resolve())
+        sys.path.insert(0, parent)
+        try:
+            return importlib.import_module(module)
+        finally:
+            sys.path.remove(parent)
 
 
 @dataclass
@@ -102,9 +124,12 @@ def calibrated_joints(config, robot):
 class ServoBus:
     def __init__(self, config, maps, sdk=None):
         self.maps, self.config, self.closed = maps, config, False
+        self.transaction_gap = config.get('serial_transaction_gap_seconds', 0)
+        if not math.isfinite(self.transaction_gap) or not 0 <= self.transaction_gap <= .02:
+            raise ValueError('Serial transaction gap must be between 0 and 0.02 seconds')
         if config.get('position_mode_confirmed') is not True:
             raise ValueError('Verify all motors use position mode, then set position_mode_confirmed=true')
-        sdk = sdk or importlib.import_module(config.get('sdk_module', 'scservo_sdk'))
+        sdk = sdk or load_sdk(config)
         family = config['servo_family']
         if not hasattr(sdk, family):
             raise ValueError(f'SDK must provide PortHandler and {family}; see README for supported vendor SDK')
@@ -136,27 +161,45 @@ class ServoBus:
             label = f'ID {servo_id}' if servo_id is not None else 'Servo bus'
             raise OSError(f'{label}: result={result}, error={error}; {"; ".join(filter(None, detail))}')
 
-    def read_degrees(self, check_mode=False):
+    def prepare_read(self):
+        # All prior transactions are complete. Drain TX, allow forwarding to
+        # settle, then discard bytes predating this fresh request. The SDK's
+        # clearPort() only flushes TX; it does not reset its RX buffer.
+        serial = getattr(self.port, 'ser', None)
+        if serial is not None:
+            serial.flush()
+        if self.transaction_gap:
+            time.sleep(self.transaction_gap)
+        if serial is not None:
+            serial.reset_input_buffer()
+
+    def read_register(self, servo_id, address, word=False):
+        self.prepare_read()
+        read = self.handler.read2ByteTxRx if word else self.handler.read1ByteTxRx
+        value, result, error = read(servo_id, address)
+        self.checked(result, error, servo_id)
+        return value
+
+    def read_degrees(self, check_mode=False, health_ids=None):
         if self.closed:
             raise OSError('Servo bus is closed')
         values = []
         for c in self.maps:
-            if check_mode:
-                torque, result, error = self.handler.read1ByteTxRx(c.servo_id, 40)
-                self.checked(result, error, c.servo_id)
+            if check_mode and (health_ids is None or c.servo_id in health_ids):
+                torque = self.read_register(c.servo_id, 40)
                 if torque != 1:
                     raise ValueError(f'ID {c.servo_id}: torque is not enabled; support arm and enable it using vendor tools')
                 if self.config['servo_family'] == 'sms_sts':
-                    mode, result, error = self.handler.read1ByteTxRx(c.servo_id, 33)
-                    self.checked(result, error, c.servo_id)
+                    mode = self.read_register(c.servo_id, 33)
                     if mode != 0:
                         raise ValueError(f'ID {c.servo_id}: not in position mode')
                 else:
-                    lo, result, error = self.handler.read2ByteTxRx(c.servo_id, 9); self.checked(result, error, c.servo_id)
-                    hi, result, error = self.handler.read2ByteTxRx(c.servo_id, 11); self.checked(result, error, c.servo_id)
+                    lo = self.read_register(c.servo_id, 9, word=True)
+                    hi = self.read_register(c.servo_id, 11, word=True)
                     if lo == 0 and hi == 0:
                         raise ValueError(f'ID {c.servo_id}: SC wheel mode detected')
             if self.reader is None:
+                self.prepare_read()
                 pos, result, error = self.handler.ReadPos(c.servo_id)
                 self.checked(result, error, c.servo_id)
                 values.append(c.from_raw(pos))
@@ -173,6 +216,7 @@ class ServoBus:
             for c in self.maps:
                 if not group.addParam(c.servo_id):
                     raise OSError(f'Could not queue feedback for ID {c.servo_id}')
+            self.prepare_read()
             self.checked(group.txRxPacket())
             values = []
             for c in self.maps:
@@ -189,20 +233,31 @@ class ServoBus:
         finally:
             group.clearParam()
 
-    def write_degrees(self, degrees):
+    def write_degrees(self, degrees, *, previous=None, duration=None):
         if self.closed:
             raise OSError('Servo bus is closed')
         if len(degrees) != 5:
             raise ValueError('Expected five motor targets')
         targets = [c.to_raw(v) for c, v in zip(self.maps, degrees)]
+        speeds = [c.speed for c in self.maps]
+        if duration is not None or previous is not None:
+            if duration is None or previous is None or not math.isfinite(duration) or duration <= 0:
+                raise ValueError('Trajectory writes need a positive duration and previous pose')
+            if len(previous) != 5:
+                raise ValueError('Expected five previous motor angles')
+            starts = [c.to_raw(v) for c, v in zip(self.maps, previous)]
+            # Each motor takes approximately one update interval to reach its
+            # next target, instead of rushing there at the fixed speed cap.
+            speeds = [max(1, min(c.speed, math.ceil(abs(raw-start)/duration)))
+                      for c, raw, start in zip(self.maps, targets, starts)]
         group = self.handler.groupSyncWrite
         group.clearParam()
         try:
-            for c, raw in zip(self.maps, targets):
+            for c, raw, speed in zip(self.maps, targets, speeds):
                 if self.config['servo_family'] == 'sms_sts':
-                    ok = self.handler.SyncWritePosEx(c.servo_id, raw, c.speed, c.acceleration)
+                    ok = self.handler.SyncWritePosEx(c.servo_id, raw, speed, c.acceleration)
                 else:
-                    ok = self.handler.SyncWritePos(c.servo_id, raw, 0, c.speed)
+                    ok = self.handler.SyncWritePos(c.servo_id, raw, 0, speed)
                 if not ok:
                     raise OSError(f'Could not queue servo ID {c.servo_id}')
             self.checked(group.txPacket())

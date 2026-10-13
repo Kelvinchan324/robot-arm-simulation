@@ -1,4 +1,21 @@
-# Raspberry Pi keyboard controller
+# Raspberry Pi robot arm control
+
+## Quick start
+
+After installing dependencies, connect a USB keyboard to the Pi and run from
+the repository root:
+
+```sh
+python raspberry_pi/control_arm.py
+```
+
+This immediately reads the keyboard in **dry-run** mode. Press **E** to enable,
+tap **W/S, arrows, A/D, J/L** to move continuously, press **Space**
+to stop, and press **Q** to exit. Another direction replaces the current motion. For real motors, complete
+calibration below and run `python raspberry_pi/control_arm.py --live`.
+The keyboard is detected automatically; no selection step is required.
+
+## Hardware and kinematics
 
 Python controller for this robot, a Waveshare **Servo Driver with ESP32**, and
 **STS3215** motors through the vendor `scservo_sdk` library.
@@ -24,9 +41,9 @@ jog equations match the browser. NumPy evaluates the transforms; MuJoCo and the
 3D meshes do not need to be installed on the Pi. This is specific to the current
 hinge/slide model, not a general MJCF engine.
 
-**Hardware calibration is still required.** The code is tested against browser
+**Calibration values are prefilled from your existing arm project.** The code is tested against browser
 MuJoCo results and your supplied SDK with an emulated serial device, not your physical arm. It deliberately
-starts in dry-run mode and refuses live operation with blank calibration.
+starts in dry-run mode. `--live` uses the prefilled mapping.
 
 ## 1. Install on the Pi
 
@@ -51,7 +68,9 @@ interchangeable with `sms_sts` without an adapter.
 
 If needed, obtain the official SDK from [Waveshare's Python download](https://files.waveshare.com/wiki/Bus_Servo_Adapter_A/STServo_Python.zip).
 Use the **`scservo_sdk` directory**, not its bundled Windows virtual environment.
-Keep that SDK outside this repository and expose its parent directory:
+Keep that SDK outside this repository. Your existing SDK is located automatically
+using `SDK_PARENT_DIR`. If you move it, update that setting. Alternatively,
+for a different temporary SDK location:
 
 ```sh
 export PYTHONPATH="/absolute/path/to/vendor-sdk-parent:$PYTHONPATH"
@@ -77,14 +96,45 @@ boolean. Its `txRxPacket()` can report success when an earlier ID has a missing
 or corrupt reply but the last ID succeeds. The adapter checks each complete
 11-byte reply, its error byte and the group's completion flag, and clears
 cached responses before and after every read. Communication failures never
-automatically switch to a different read method. `SYNC_READ=False` explicitly
-selects individual reads if your board's forwarding firmware requires them.
+automatically switch to a different read method. `SYNC_READ=False` is the default, matching the individual `ReadPos` calls
+in your working arm project. Set it to `True` only for verified sync-read support.
 
 The SDK's `setBaudRate()` already opens the port. The controller calls it once
 at the requested baud, avoiding the example's initial open at the SDK default.
 The original SDK and example files are left unchanged.
 
-## 2. Set the raw reference values at the top of config.py
+## 2. Existing arm settings
+
+`config.py` now includes the settings from your local
+`STS3215-5DOF-Robot-Arm/arm_settings.py`:
+
+- IDs 1–5, `/dev/ttyUSB0`, 115200 baud.
+- Individual position reads (`SYNC_READ=False`), matching `arm_helpers.py`.
+- Zero encoder positions: 2048 for every servo.
+- Encoder scale: 4096/360 ticks per degree; negative for the gripper.
+- Source travel limits intersected with the simulation CAD limits.
+
+`wrist` maps to `wrist_pitch`; `gripper` maps to `gripper_drive`.
+We assume the source angles use the simulation display convention and your
+hardware middle positions are already calibrated, as requested. The source
+labels its values as defaults; no additional gearing ratios were found.
+Motor speed is capped at the source value of 3000 ticks/s, with acceleration 254.
+For jogging, each motor speed is calculated from its target distance and update
+interval so it travels between targets instead of rushing to each small step.
+Joint setpoints are capped at 30°/s. Jogging uses the full simulation step rate,
+with a 40 ms target update period. Actual updates depend on serial and IK timing.
+Serial transactions have a 3 ms forwarding gap and discard stale buffered
+bytes before fresh feedback requests. Corrupt fresh replies still stop control.
+These values are copied, so future source edits do not update this file automatically.
+
+Your SDK location is saved in `SDK_PARENT_DIR` in `config.py`. No
+`PYTHONPATH` export is needed. From the repository root:
+
+```sh
+python raspberry_pi/control_arm.py --live
+```
+
+### Reference values and future adjustments
 
 The first editable block is `RAW_AT_REFERENCE`, one entry for each of IDs 1–5.
 Those values mean “the raw encoder position at this known joint angle,” **not**
@@ -130,8 +180,9 @@ stops, and narrow `RAW_LIMITS` if appropriate. Allowed CAD/display ranges are:
 
 Use a narrower range if the motor, gearing, cabling or assembly requires it.
 The script rejects settings outside the CAD limits or the raw servo range.
-Only after measuring/checking all five joints, set `CALIBRATION_CONFIRMED` and
-`POSITION_MODE_CONFIRMED` to `True`. It checks STS position mode and existing
+The configuration assumes your arm is already calibrated and prepared:
+`CALIBRATION_CONFIRMED` and `POSITION_MODE_CONFIRMED` default to `True`.
+Your existing mapping values are already entered above. It checks STS position mode and existing
 torque-enable state before motion. Support the arm while preparing it with the
 vendor tools; this script never enables torque against an old servo target.
 
@@ -143,10 +194,13 @@ These commands never open a serial port:
 python raspberry_pi/control_arm.py --demo
 python -m unittest discover -s raspberry_pi/tests -v
 python raspberry_pi/control_arm.py --list-keyboards
-python raspberry_pi/control_arm.py --keyboard /dev/input/eventN
+python raspberry_pi/control_arm.py
 ```
 
-Replace `eventN` with the keyboard device reported by the listing. Linux `evdev`
+The program automatically selects a connected full keyboard and prints its device path.
+Just run the command; there is no keyboard selection prompt. If several keyboards
+are connected, it chooses the first device path. To override it, use
+`--keyboard /dev/input/eventN`; `--list-keyboards` lists candidates. Linux `evdev`
 reads a **keyboard physically connected to the Pi**, including real key-down and
 key-up events. It does not read keystrokes sent through SSH or the GitHub website.
 Choose a dedicated keyboard; the process grabs it exclusively so typing into
@@ -157,9 +211,9 @@ Pi's normal device permissions. Q releases the keyboard and exits.
 ## 4. Control the arm
 
 ```sh
-python raspberry_pi/control_arm.py --live --keyboard /dev/input/eventN
+python raspberry_pi/control_arm.py --live
 # Optional per-run override (otherwise uses config.py):
-python raspberry_pi/control_arm.py --live --keyboard /dev/input/eventN --port /dev/ttyUSB1 --baudrate 115200
+python raspberry_pi/control_arm.py --live --port /dev/ttyUSB1 --baudrate 115200
 ```
 
 Press **E** to enable and level the wrist, matching the website's Enable + level
@@ -172,33 +226,43 @@ chosen pitch.
 | Left / Right | Base yaw left / right |
 | Up / Down | Forward / backward in the arm's yaw plane |
 | A / D | Pitch up / down while holding tool centre |
-| Hold J / L | Gradually open / close; release to stop changing the target |
+| J / L | Start opening / closing continuously |
+| Space | Stop movement and hold measured position; next direction resumes |
 | E | Enable + level / pause |
 | Escape | Pause and hold measured position |
 | Q | Stop commands, hold measured position, exit |
 
-Hold J/L to change the gripper angle at up to 30 displayed degrees/second
-(six seconds for the full -90° to +90° range). Releasing the key stops further
-increments; the servo may finish its last small commanded step. Holding both
-keys cancels gripper motion. Measured travel limits and any lower
-`MAX_JOINT_DEG_PER_SECOND['gripper_drive']` limit still apply. Escape pauses all motion.
-Levelling also ramps before Cartesian jogging begins. Default requested jogging
-speed is 25% of the browser, with joint-rate limits. Set `SPEED_SCALE=1.0` only
-after checking the mechanism if you want the browser's nominal step rate.
+Direction keys are latched by default: tap once to continue moving after release.
+Tap another direction to replace the current motion. This also applies to J/L,
+which open/close at up to 30 displayed degrees/second. **Space** clears the
+motion and requests a measured hold without disabling keys; tap a direction to
+resume. **Escape** pauses and requires E to enable again. E still levels the wrist
+before jogging; Space cancels levelling too.
+
+Set `LATCHED_KEYS=False` in `config.py` to restore hold-to-move controls.
+`SPEED_SCALE=1.0` requests the simulation's nominal Cartesian speed (31.25 mm/s
+translation and 18.75°/s yaw/pitch). Joint limits can reduce that speed.
+`MAX_JOINT_DEG_PER_SECOND` is 30 per joint, and `CONTROL_PERIOD_SECONDS=0.04`
+requests smaller, more frequent setpoint updates. The terminal prints `cycle ms`
+so serial/IK delays can be checked on the Pi. Position feedback and tracking
+checks run on each active tick; mode/torque checks run on enable and at least
+every 0.5 seconds per motor while moving, staggered across cycles. Serial faults and watchdog delays still stop motion.
+
 Near singularities the controller reduces a requested Cartesian step to stay
 within joint-rate limits; unreachable steps are rolled back. Motor speed and
 acceleration are configured separately in `config.py`.
 
 Five targets are sent together using an SDK sync-write packet. A successful
 sync-write means the packet was sent; broadcast writes have no motor acknowledgement.
-The script reads positions together using the same 56–66 register block as your
-sync-read example, checks torque and position mode on each active tick, and
+The script reads each servo position individually, matching your working arm
+project. Optional sync-read uses the 56–66 register block. It checks torque and
+position mode every 0.5 seconds while active, and
 stops on communication errors, excessive tracking
 error, lost keyboard events or a delayed control loop. Startup feedback is used
 to initialise FK; during motion the solver tracks its commanded pose and checks
 the measured pose against it. It is not a calibrated dynamics/torque controller.
 
-**Escape is a software pause, not a hardware emergency stop.** The controller
+**Space/Escape are software stops, not a hardware emergency stop.** The controller
 tries to hold the measured pose and leaves torque enabled to avoid dropping a
 gravity-loaded arm. If USB fails or the process/OS hangs, a hold command may not
 reach the controller; motors can finish their last small setpoint. Use an
@@ -210,7 +274,7 @@ calibration, backlash, flex or misassembled joints.
 
 - `config.py`: raw reference values, calibration, IDs, serial port and speeds.
 - `kinematics.py`: FK, calibrated angles, position IK and pitch-constrained jogging.
-- `controller.py`: key state, levelling, hold-to-move gripper control and rate-limited jogging.
+- `controller.py`: key state, levelling, continuous/hold-to-move control and rate-limited jogging.
 - `servo_bus.py`: calibration conversion and Waveshare SDK commands/feedback.
 - `control_arm.py`: Pi keyboard loop, dry-run/live modes and stop handling.
 - `read_positions.py`: read-only raw position calibration aid.

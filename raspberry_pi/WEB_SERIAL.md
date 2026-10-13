@@ -12,12 +12,13 @@ monitor before connecting, because only one program can own the port.
 
 ## Prepare calibration once
 
-1. Enter measured values in `raspberry_pi/config.py`: raw reference positions,
+1. `raspberry_pi/config.py` is prefilled from your existing STS3215 project.
+   Review its raw reference positions,
    signed ticks per displayed joint degree, and safe travel limits. Follow the
    measurement instructions in [README.md](README.md). IDs are 1–5 from base to
    gripper. Do not use values from the synthetic test fixtures on hardware.
-2. After verifying calibration and position mode, set `CALIBRATION_CONFIRMED`
-   and `POSITION_MODE_CONFIRMED` to `True`.
+2. The configuration already assumes calibration and position mode are confirmed.
+   The existing mapping values are already entered; no extra confirmation is needed.
 3. From the repository root, export the browser profile:
 
    ```sh
@@ -69,6 +70,28 @@ monitor before connecting, because only one program can own the port.
 5. **Disconnect** pauses and closes the port. Simulation-only controls become
    available again. While connected, the FK sliders, reference/example poses
    and point-target IK are read-only; only keyboard jogging drives hardware.
+
+## Troubleshooting connection
+
+- If **Connect USB** is disabled, use desktop Chrome or Edge and open the page
+  from `http://localhost:8000` (or the published HTTPS site). Web Serial is not
+  available on every browser or on an insecure remote HTTP page.
+- If the browser's device picker opens but no device appears, reconnect the
+  board with a USB data cable and check that the operating system detects its
+  USB serial device.
+- If the picker opens but the connection fails, choose the ESP32 USB serial
+  device, put the board in **Start Serial Forwarding** mode, leave **115200
+  baud** selected, and close vendor tools, serial monitors, or Python
+  controllers that may already be using the port.
+- If the status says the device was disconnected or lost, the USB serial link
+  ended after selection. Connect the board to the same computer running the
+  browser, check that it remains powered and in serial-forwarding mode, then
+  unplug/reconnect it and click **Connect USB** again. You do not need to
+  click Disconnect first after a fault. Recoverable UART stream errors while
+  idle reopen the browser reader; errors during feedback still stop control.
+- The status below **Connect USB** displays the browser's connection error.
+  A successful connection with no calibration is read-only; load a valid
+  measured calibration profile separately to enable movement.
 
 Leaving the window, hiding the tab, or moving focus away from the 3D view pauses keyboard motion.
 A fresh **E** is needed to resume. A failed serial transaction, servo fault,

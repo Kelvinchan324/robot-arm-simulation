@@ -7,8 +7,8 @@ export class SerialLink{
   async open(baudRate=115200){
     try{
       await this.port.open({baudRate,dataBits:8,stopBits:1,parity:'none',flowControl:'none',bufferSize:4096});
-      await this.port.setSignals({dataTerminalReady:false,requestToSend:false});
-      this.reader=this.port.readable.getReader();this.writer=this.port.writable.getWriter();
+      // Changing DTR/RTS during open can reset some ESP32 boards.
+      this.writer=this.port.writable.getWriter();
       this.readTask=this.readLoop();
     }catch(error){await this.close();throw error;}
   }
@@ -17,21 +17,30 @@ export class SerialLink{
     this.pending?.reject(error);this.pending=null;
   }
   async readLoop(){
-    try{
-      while(!this.closed){
-        const {value,done}=await this.reader.read();
-        if(done){if(!this.closed)this.fail(Error('Serial device disconnected'));break;}
-        for(const response of this.parser.push(value)){
-          const p=this.pending;if(!p)continue;
-          if(!p.ids.includes(response.id)||p.responses.has(response.id))continue;
-          if(response.error)throw Error(servoError(response.id,response.error));
-          if(response.data.length!==p.length)throw Error(`Motor ${response.id}: incomplete feedback`);
-          p.responses.set(response.id,response.data);
-          if(p.responses.size===p.ids.length){this.pending=null;p.resolve(p.responses);}
+    while(!this.closed&&this.port.readable){
+      this.reader=this.port.readable.getReader();
+      try{
+        while(!this.closed){
+          const {value,done}=await this.reader.read();
+          if(done){if(!this.closed)this.fail(Error('Serial device disconnected'));return;}
+          for(const response of this.parser.push(value)){
+            const p=this.pending;if(!p)continue;
+            if(!p.ids.includes(response.id)||p.responses.has(response.id))continue;
+            if(response.error)throw Error(servoError(response.id,response.error));
+            if(response.data.length!==p.length)throw Error(`Motor ${response.id}: incomplete feedback`);
+            p.responses.set(response.id,response.data);
+            if(p.responses.size===p.ids.length){this.pending=null;p.resolve(p.responses);}
+          }
         }
-      }
-    }catch(error){if(!this.closed)this.fail(error);}
-    finally{this.reader?.releaseLock();this.reader=null;}
+      }catch(error){
+        // Web Serial replaces the readable stream after recoverable UART
+        // errors. Never recover an in-flight transaction using partial data.
+        const recoverable=['BreakError','FramingError','ParityError','BufferOverrunError'].includes(error.name);
+        if(!this.closed&&(!recoverable||this.pending)){this.fail(error);return;}
+        this.parser=new PacketParser();
+      }finally{this.reader.releaseLock();this.reader=null;}
+    }
+    if(!this.closed)this.fail(Error('Serial device disconnected'));
   }
   async bounded(promise){
     let timer;
